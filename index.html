@@ -477,8 +477,7 @@ wireField(empInput, empDropdown, empFieldInner, "e");
 wireField(jobInput, jobDropdown, jobFieldInner, "j");
 wireField(locInput, locDropdown, locFieldInner, "loc");
 
-$("searchForm").addEventListener("submit", async ev => {
-  ev.preventDefault();
+async function executeSearch() {
   hasSearched = true;
   searchBtn.disabled = true;
   searchBtnText.textContent = "Searching\u2026";
@@ -503,6 +502,11 @@ $("searchForm").addEventListener("submit", async ev => {
     searchBtn.disabled = false;
     searchBtnText.textContent = "Search Salaries";
   }
+}
+
+$("searchForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  await executeSearch();
 });
 
 function updateClearBtn() {
@@ -526,9 +530,8 @@ POPULAR.forEach(item => {
     empInput.value = item.employer;
     jobInput.value = item.job;
     locInput.value = item.loc || "";
-    hasSearched = false;
-    $("resultsWrap").classList.remove("show");
     updateClearBtn();
+    executeSearch();
   });
   popularContainer.appendChild(btn);
 });
