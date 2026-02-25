@@ -1,9 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-WPM73MFR');</script>
+<!-- End Google Tag Manager -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>H1B Salary Search — Free & Open Source</title>
+<title>H1B Salary Search - Free & Open Source</title>
 <meta name="description" content="Search H1B visa salary data from the U.S. Department of Labor. Free, fast, open source.">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -13,10 +20,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .skeleton{background:#E2DDD6;border-radius:4px;animation:pulse 1.5s ease infinite}
 
-nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:52px;display:flex;align-items:center}
-.nav-dot{width:8px;height:8px;border-radius:50%;background:#C4A35A;box-shadow:0 0 6px #C4A35A;margin-right:10px}
+nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px}
+.nav-dot{width:8px;height:8px;border-radius:50%;background:#C4A35A;box-shadow:0 0 6px #C4A35A;margin-right:0}
 .nav-title{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.3px}
 .nav-accent{color:#C4A35A}
+.nav-tagline{color:rgba(255,255,255,.6);font-size:12px;font-weight:400;letter-spacing:.2px}
+.nav-link{color:#C4A35A;text-decoration:none;font-weight:500}
+.nav-link:hover{color:#fff;text-decoration:underline}
 
 .hero{position:relative;background:linear-gradient(135deg,#1B2A4A 0%,#243560 50%,#1B2A4A 100%);padding:40px 24px 56px;overflow:hidden}
 .hero h1{font-size:clamp(28px,5vw,44px);font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.1;margin-bottom:14px;text-align:center}
@@ -92,8 +102,8 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
 .no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
-.disclaimer{display:flex;align-items:flex-start;gap:8px;background:rgba(196,163,90,.05);border:1px solid rgba(196,163,90,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#8896A6;line-height:1.5}
-.disclaimer strong{color:#1B2A4A}
+.disclaimer{display:flex;align-items:flex-start;gap:8px;background:rgba(196,163,90,.05);border:1px solid rgba(196,163,90,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#000;line-height:1.5}
+.disclaimer strong{color:#000}
 
 .spinner{animation:spin 1s linear infinite}
 .hidden{display:none!important}
@@ -107,6 +117,7 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
   .btn-search{height:40px;font-size:13px}
   .btn-clear{width:40px;height:40px}
   nav{padding:0 16px;height:48px}
+  .nav-tagline{display:none}
   main{padding:16px 12px 32px}
   .section-title{font-size:15px}
   .tbl-wrap{display:none}
@@ -133,10 +144,15 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 </style>
 </head>
 <body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WPM73MFR"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
 
 <nav>
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
+  <span class="nav-tagline">—  <a href="https://github.com/gary-limo/h1b-salary-search-" target="_blank" rel="noopener noreferrer" class="nav-link">open source</a>  project</span>
 </nav>
 
 <section class="hero">
@@ -215,7 +231,7 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 
   <div class="disclaimer">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-    <span><strong>Data source:</strong> U.S. Department of Labor H-1B LCA. Wages reported by employers may not reflect accurate compensation. For reference only.</span>
+    <span><strong>Data source:</strong> U.S. Department of Labor H-1B LCA. Wages do not include benefits or bonuses. For reference only.</span>
   </div>
 </main>
 
