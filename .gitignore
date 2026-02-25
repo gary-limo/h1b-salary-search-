@@ -1,0 +1,8 @@
+node_modules/
+.npm/
+.amplify/
+amplify_outputs*
+.DS_Store
+
+# local scripts (CSV import — run manually, not in build)
+/scripts/
