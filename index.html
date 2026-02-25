@@ -18,6 +18,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <title>H1B Salary Search - Free & Open Source</title>
 <meta name="description" content="Search H1B visa salary data from the U.S. Department of Labor. Free, fast, open source.">
 <style>
@@ -298,7 +299,7 @@ async function initDB() {
     },
   });
   const worker = await duckdb.createWorker(bundle.mainWorker);
-  const logger = new duckdb.ConsoleLogger();
+  const logger = { log: () => {}, warn: () => {}, error: () => {}, info: () => {}, debug: () => {} };
   db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   conn = await db.connect();
@@ -307,8 +308,6 @@ async function initDB() {
   if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
   await db.registerFileBuffer("h1b.parquet", new Uint8Array(await res.arrayBuffer()));
   await conn.query(`CREATE TABLE h1b AS SELECT * FROM read_parquet('h1b.parquet')`);
-  const cnt = (await conn.query(`SELECT count(*)::INTEGER AS c FROM h1b`)).toArray()[0].c;
-  console.log(`DuckDB ready: ${cnt} rows loaded`);
 }
 
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
@@ -317,9 +316,8 @@ searchBtnText.textContent = "Loading database\u2026";
 const dbReady = initDB().then(() => {
   searchBtn.disabled = false;
   searchBtnText.textContent = "Search Salaries";
-}).catch(err => {
+}).catch(() => {
   searchBtnText.textContent = "Load failed";
-  console.error("DuckDB init failed:", err);
 });
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
