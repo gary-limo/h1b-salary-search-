@@ -1,10 +1,14 @@
-# Cloudflare Pages: cache static assets at edge (all POPs)
+# Cloudflare Pages: cache + security headers
 # https://developers.cloudflare.com/pages/configuration/headers/
 
 /*
   Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
 
-/h1b_data.parquet
+/h1b_data_*.parquet
   Cache-Control: public, max-age=31536000, immutable
 
 /index.html
