@@ -7,142 +7,179 @@
 <meta name="description" content="Search H1B visa salary data from the U.S. Department of Labor. Free, fast, open source.">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#FAFAF8;color:#1B2A4A;-webkit-font-smoothing:antialiased}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#FAFAF8;color:#1B2A4A;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.skeleton{background:#E2DDD6;border-radius:6px;animation:pulse 1.5s ease infinite}
+.skeleton{background:#E2DDD6;border-radius:4px;animation:pulse 1.5s ease infinite}
 
-nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:56px;display:flex;align-items:center}
+nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:52px;display:flex;align-items:center}
 .nav-dot{width:8px;height:8px;border-radius:50%;background:#C4A35A;box-shadow:0 0 6px #C4A35A;margin-right:10px}
 .nav-title{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.3px}
 .nav-accent{color:#C4A35A}
 
-.hero{position:relative;background:linear-gradient(135deg,#1B2A4A 0%,#243560 50%,#1B2A4A 100%);padding:72px 24px 100px;overflow:hidden}
-.hero h1{font-size:clamp(32px,6vw,56px);font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1.1;margin-bottom:16px;text-align:center}
+.hero{position:relative;background:linear-gradient(135deg,#1B2A4A 0%,#243560 50%,#1B2A4A 100%);padding:40px 24px 56px;overflow:hidden}
+.hero h1{font-size:clamp(28px,5vw,44px);font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.1;margin-bottom:14px;text-align:center}
 .hero h1 .accent{color:#C4A35A;position:relative;display:inline-block}
-.hero h1 .accent::after{content:"";position:absolute;bottom:-4px;left:0;right:0;height:3px;background:linear-gradient(90deg,#C4A35A,transparent);border-radius:2px}
+.hero h1 .accent::after{content:"";position:absolute;bottom:-3px;left:0;right:0;height:2px;background:linear-gradient(90deg,#C4A35A,transparent);border-radius:2px}
 
-.search-box{max-width:680px;margin:0 auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:16px;backdrop-filter:blur(8px)}
-.search-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;position:relative;z-index:10}
+.search-box{max-width:680px;margin:0 auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px;backdrop-filter:blur(8px)}
+.search-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;position:relative;z-index:10}
 .field-wrap{position:relative}
-.field-inner{position:relative;background:rgba(255,255,255,.95);border-radius:12px;border:1.5px solid transparent;transition:border .15s,box-shadow .15s}
-.field-inner.focused{background:#fff;border-color:#C4A35A;box-shadow:0 0 0 3px rgba(196,163,90,.2)}
-.field-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:rgba(27,42,74,.35);pointer-events:none;transition:color .15s;display:flex}
+.field-inner{position:relative;background:rgba(255,255,255,.95);border-radius:10px;border:1.5px solid transparent;transition:border .15s,box-shadow .15s}
+.field-inner.focused{background:#fff;border-color:#C4A35A;box-shadow:0 0 0 3px rgba(196,163,90,.18)}
+.field-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:rgba(27,42,74,.35);pointer-events:none;transition:color .15s;display:flex}
 .field-inner.focused .field-icon{color:#1B2A4A}
-.field-input{width:100%;height:46px;padding-left:36px;padding-right:12px;border:none;border-radius:12px;background:transparent;font-size:14px;color:#1B2A4A;outline:none;font-family:inherit}
-.dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:200;background:#fff;border-radius:12px;border:1px solid #E2DDD6;box-shadow:0 8px 24px rgba(27,42,74,.12);overflow:hidden;display:none}
+.field-input{width:100%;height:40px;padding-left:32px;padding-right:10px;border:none;border-radius:10px;background:transparent;font-size:13px;color:#1B2A4A;outline:none;font-family:inherit}
+.dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:#fff;border-radius:10px;border:1px solid #E2DDD6;box-shadow:0 8px 24px rgba(27,42,74,.12);overflow:hidden;display:none}
 .dropdown.open{display:block}
-.dropdown-item{padding:10px 16px;font-size:13px;color:#1B2A4A;cursor:pointer;transition:background .1s}
+.dropdown-item{padding:8px 14px;font-size:13px;color:#1B2A4A;cursor:pointer;transition:background .1s}
 .dropdown-item:hover{background:rgba(196,163,90,.08)}
 .dropdown-item+.dropdown-item{border-top:1px solid #F0ECE8}
-.dropdown-loading{padding:12px 16px;font-size:13px;color:#9CA3AF;display:flex;align-items:center;gap:8px}
+.dropdown-loading{padding:10px 14px;font-size:12px;color:#9CA3AF;display:flex;align-items:center;gap:6px}
 
 .btn-row{display:flex;gap:8px;position:relative;z-index:1}
-.btn-search{flex:1;height:50px;background:#C41E3A;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s;letter-spacing:-.2px}
+.btn-search{flex:1;height:42px;background:#C41E3A;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;letter-spacing:-.2px}
 .btn-search:hover{background:#A01830}
 .btn-search:disabled{background:#9B1629;cursor:not-allowed}
-.btn-clear{width:50px;height:50px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:12px;color:rgba(255,255,255,.6);cursor:pointer;display:none;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
+.btn-clear{width:42px;height:42px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:rgba(255,255,255,.6);cursor:pointer;display:none;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
 .btn-clear:hover{background:rgba(255,255,255,.18)}
 .btn-clear.show{display:flex}
 
-.popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:16px}
+.popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;position:relative;z-index:2}
 .popular-label{font-size:11px;color:rgba(255,255,255,.35);align-self:center;margin-right:2px}
-.popular-btn{padding:4px 12px;border-radius:99px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.55);font-size:12px;cursor:pointer;transition:all .15s}
+.popular-btn{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;transition:all .15s}
 .popular-btn:hover{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(196,163,90,.4)}
 
-.wave{position:absolute;bottom:-1px;left:0;right:0}
+.wave{position:absolute;bottom:-1px;left:0;right:0;pointer-events:none}
 
-main{max-width:900px;margin:0 auto;padding:36px 24px 64px}
-.section-hdr{display:flex;align-items:center;gap:10px;margin-bottom:4px}
-.section-bar{width:4px;height:22px;border-radius:2px;background:#C4A35A;flex-shrink:0}
-.section-title{font-size:18px;font-weight:800;letter-spacing:-.4px;display:flex;align-items:center;gap:7px}
-.badge{margin-left:4px;padding:2px 10px;border-radius:99px;background:rgba(27,42,74,.07);color:#5A6478;font-size:12px;font-weight:600}
+main{max-width:1080px;margin:0 auto;padding:28px 24px 40px;width:100%}
+.section-hdr{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.section-bar{width:3px;height:18px;border-radius:2px;background:#C4A35A;flex-shrink:0}
+.section-title{font-size:16px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:6px}
+.section-title h2{font-size:inherit;font-weight:inherit}
+.badge{margin-left:4px;padding:2px 10px;border-radius:99px;background:rgba(27,42,74,.06);color:#5A6478;font-size:11px;font-weight:600}
 
-.results-wrap{margin-bottom:48px;display:none}
+.results-wrap{margin-bottom:20px;display:none}
 .results-wrap.show{display:block}
-.tbl-wrap{background:#fff;border-radius:14px;border:1px solid #E2DDD6;overflow:hidden;box-shadow:0 1px 3px rgba(27,42,74,.06);margin-top:16px}
-.tbl-scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:700px}
-thead tr{background:#1B2A4A;color:#fff;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
-th{padding:14px 16px;text-align:left;white-space:nowrap}
-tbody tr{transition:background .15s;animation:fadeUp .3s ease both}
-tbody tr:hover{background:rgba(27,42,74,.02)}
-td{padding:14px 16px;font-size:14px;color:#5A6478;border-bottom:1px solid #E2DDD6}
+
+.tbl-wrap{background:#fff;border-radius:12px;border:1px solid #E2DDD6;overflow:hidden;box-shadow:0 1px 4px rgba(27,42,74,.05);margin-top:10px}
+.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;white-space:nowrap}
+thead tr{background:#1B2A4A}
+th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:rgba(255,255,255,.85);letter-spacing:.4px;text-transform:uppercase;cursor:pointer;user-select:none;transition:color .1s}
+th:hover{color:#fff}
+th .sort-arrow{display:inline-block;margin-left:4px;font-size:9px;opacity:.4;transition:opacity .1s}
+th.sorted .sort-arrow{opacity:1}
+tbody tr{transition:background .1s;animation:fadeUp .25s ease both}
+tbody tr:hover{background:#F8F6F3}
+tbody tr:nth-child(even){background:#FCFBF9}
+tbody tr:nth-child(even):hover{background:#F8F6F3}
+td{padding:10px 14px;font-size:13px;color:#1B2A4A;border-bottom:1px solid #F0ECE8}
 tbody tr:last-child td{border-bottom:none}
-td.emp{font-weight:600;color:#1B2A4A}
-td.salary{font-family:ui-monospace,monospace;font-weight:600;color:#1B2A4A}
+td.emp{white-space:normal;word-break:break-word}
+td.job{white-space:normal;word-break:break-word;min-width:180px}
 
-.pager{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding:12px 16px;background:#fff;border-radius:12px;border:1px solid #E2DDD6}
-.pager-info{font-size:13px;color:#5A6478}
+.results-cards{display:none}
+
+.pager{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#fff;border-radius:10px;border:1px solid #E2DDD6}
+.pager-info{font-size:12px;color:#8896A6}
 .pager-btns{display:flex;align-items:center;gap:4px}
-.pager-btn{padding:6px 10px;border-radius:8px;border:1px solid #E2DDD6;background:#fff;color:#1B2A4A;cursor:pointer;display:flex;align-items:center;font-size:13px;font-weight:600}
-.pager-btn:disabled{background:#F5F5F4;color:#9CA3AF;cursor:not-allowed}
-.pager-page{padding:0 8px;font-size:13px;color:#5A6478;font-weight:600}
+.pager-btn{padding:6px 12px;border-radius:6px;border:1px solid #E2DDD6;background:#fff;color:#1B2A4A;cursor:pointer;display:flex;align-items:center;font-size:12px;font-weight:600;transition:all .1s}
+.pager-btn:hover:not(:disabled){background:#F8F6F3;border-color:#C4A35A}
+.pager-btn:disabled{background:#F5F5F4;color:#C0C7CF;cursor:not-allowed}
+.pager-page{padding:0 10px;font-size:12px;color:#5A6478;font-weight:600}
 
-.error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:12px;padding:12px 16px;margin-top:16px;font-size:14px;color:#C41E3A}
-.no-results{text-align:center;padding:48px 24px;color:#9CA3AF;font-size:15px}
-.disclaimer{display:flex;align-items:flex-start;gap:10px;background:rgba(196,163,90,.06);border:1px solid rgba(196,163,90,.25);border-radius:12px;padding:12px 16px;font-size:13px;color:#5A6478;line-height:1.5}
+.error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
+.no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
+.disclaimer{display:flex;align-items:flex-start;gap:8px;background:rgba(196,163,90,.05);border:1px solid rgba(196,163,90,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#8896A6;line-height:1.5}
 .disclaimer strong{color:#1B2A4A}
 
 .spinner{animation:spin 1s linear infinite}
 .hidden{display:none!important}
+
+/* ─── Mobile ────────────────────────────────────────────────────────────── */
+@media (max-width:640px){
+  .hero{padding:28px 16px 40px}
+  .hero h1{margin-bottom:12px}
+  .search-box{padding:10px;border-radius:14px}
+  .search-grid{grid-template-columns:1fr;gap:6px}
+  .btn-search{height:40px;font-size:13px}
+  .btn-clear{width:40px;height:40px}
+  nav{padding:0 16px;height:48px}
+  main{padding:16px 12px 32px}
+  .section-title{font-size:15px}
+  .tbl-wrap{display:none}
+  .results-cards{display:block}
+  .result-card{background:#fff;border:1px solid #E8E4DF;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.03);animation:fadeUp .25s ease both}
+  .result-card .rc-emp{font-weight:700;color:#1B2A4A;font-size:14px;margin-bottom:2px}
+  .result-card .rc-job{color:#4A5568;font-size:13px;margin-bottom:8px}
+  .result-card .rc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
+  .result-card .rc-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#8896A6;font-weight:600}
+  .result-card .rc-val{font-size:13px;color:#1B2A4A;font-weight:500}
+  .result-card .rc-val.money{font-weight:700;font-variant-numeric:tabular-nums}
+  .pager{flex-wrap:wrap;gap:6px;padding:10px}
+  .pager-info{width:100%;text-align:center}
+  .popular{gap:4px}
+}
+
+/* ─── Tablet ────────────────────────────────────────────────────────────── */
+@media (min-width:641px) and (max-width:1024px){
+  main{max-width:100%;padding:20px 16px 32px}
+  .search-grid{grid-template-columns:repeat(3,1fr)}
+  td.emp{min-width:120px}
+  td.job{min-width:140px}
+}
 </style>
 </head>
 <body>
 
-<!-- NAV -->
 <nav>
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
 </nav>
 
-<!-- HERO -->
 <section class="hero">
-  <div style="max-width:760px;margin:0 auto;text-align:center">
+  <div style="max-width:720px;margin:0 auto;text-align:center">
     <h1>H1B Salary <span class="accent">Explorer</span></h1>
 
     <form id="searchForm" autocomplete="off" class="search-box">
       <div class="search-grid">
-        <!-- Employer -->
         <div class="field-wrap">
           <div class="field-inner" id="empFieldInner">
             <div class="field-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
             </div>
-            <input class="field-input" id="empInput" type="text" placeholder="Employer name" aria-label="Employer" autocomplete="new-password">
+            <input class="field-input" id="empInput" type="text" placeholder="Employer" aria-label="Employer" autocomplete="new-password">
           </div>
           <div class="dropdown" id="empDropdown"></div>
         </div>
-        <!-- Job Title -->
         <div class="field-wrap">
           <div class="field-inner" id="jobFieldInner">
             <div class="field-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
             </div>
             <input class="field-input" id="jobInput" type="text" placeholder="Job title" aria-label="Job title" autocomplete="new-password">
           </div>
           <div class="dropdown" id="jobDropdown"></div>
         </div>
-        <!-- City -->
         <div class="field-wrap">
-          <div class="field-inner" id="cityFieldInner">
+          <div class="field-inner" id="locFieldInner">
             <div class="field-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
-            <input class="field-input" id="cityInput" type="text" placeholder="Worksite city" aria-label="City" autocomplete="new-password">
+            <input class="field-input" id="locInput" type="text" placeholder="Location" aria-label="Location" autocomplete="new-password">
           </div>
-          <div class="dropdown" id="cityDropdown"></div>
+          <div class="dropdown" id="locDropdown"></div>
         </div>
       </div>
-
       <div class="btn-row">
         <button type="submit" class="btn-search" id="searchBtn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <span id="searchBtnText">Search Salaries</span>
         </button>
         <button type="button" class="btn-clear" id="clearBtn" title="Clear">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
     </form>
@@ -151,26 +188,23 @@ td.salary{font-family:ui-monospace,monospace;font-weight:600;color:#1B2A4A}
       <span class="popular-label">Popular:</span>
     </div>
   </div>
-
   <div class="wave">
     <svg viewBox="0 0 1440 56" fill="none"><path d="M0 56L60 49C120 42 240 28 360 22.3C480 17 600 20 720 25.7C840 31 960 39 1080 42C1200 45 1320 42 1380 40.7L1440 39V56H0Z" fill="#FAFAF8"/></svg>
   </div>
 </section>
 
-<!-- RESULTS -->
 <main>
   <div class="results-wrap" id="resultsWrap">
     <div class="section-hdr">
       <div class="section-bar"></div>
       <div class="section-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <h2>Search Results</h2>
       </div>
       <span class="badge" id="resultsBadge"></span>
     </div>
-
     <div id="errorBox" class="error-box hidden">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       <span id="errorMsg"></span>
     </div>
     <div id="skeletonTable"></div>
@@ -180,253 +214,253 @@ td.salary{font-family:ui-monospace,monospace;font-weight:600;color:#1B2A4A}
   </div>
 
   <div class="disclaimer">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C4A35A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
     <span><strong>Data source:</strong> U.S. Department of Labor H-1B LCA. Wages reported by employers may not reflect accurate compensation. For reference only.</span>
   </div>
 </main>
 
-<script>
-// ─── CONFIG ─────────────────────────────────────────────────────────────────
-// After deploying the Amplify backend, run:
-//   npx ampx generate outputs --branch main --app-id <YOUR_APP_ID>
-// Then copy the url and api_key from amplify_outputs.json here.
-const API_URL = "https://bytnax7zuzdnvnlladxamuo4qm.appsync-api.us-east-1.amazonaws.com/graphql";
-const API_KEY = "da2-q2gpcpz7jfgkflhukjdgoniqfm";
+<script type="module">
+const DUCKDB_VERSION = "1.29.0";
+const CDN = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/dist`;
+const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
 
-const FIELDS = "id employerName jobTitle worksiteCity worksiteState wageRateOfPayFrom receivedDate beginDate";
-const PAGE_SIZE = 10;
+const PARQUET_URL = "h1b_data.parquet";
+const PAGE_SIZE = 15;
 
 const POPULAR = [
-  { label: "Google LLC",     employer: "Google LLC",            job: "",               city: "" },
-  { label: "Amazon",         employer: "Amazon",                job: "",               city: "" },
-  { label: "Microsoft",      employer: "Microsoft Corporation", job: "",               city: "" },
-  { label: "Meta",           employer: "Meta Platforms",        job: "",               city: "" },
-  { label: "Apple",          employer: "Apple Inc",             job: "",               city: "" },
-  { label: "Accenture LLP",  employer: "Accenture LLP",        job: "",               city: "" },
-  { label: "Data Scientist", employer: "",                      job: "Data Scientist", city: "" },
-  { label: "San Francisco",  employer: "",                      job: "",               city: "San Francisco" },
-  { label: "Seattle",        employer: "",                      job: "",               city: "Seattle" },
-  { label: "New York",       employer: "",                      job: "",               city: "New York" },
+  { label: "Google",          employer: "Google",            job: "",  loc: "" },
+  { label: "Amazon",          employer: "Amazon",            job: "",  loc: "" },
+  { label: "Microsoft",       employer: "Microsoft",         job: "",  loc: "" },
+  { label: "Meta",            employer: "Meta",              job: "",  loc: "" },
+  { label: "Apple",           employer: "Apple",             job: "",  loc: "" },
+  { label: "Accenture",       employer: "Accenture",         job: "",  loc: "" },
+  { label: "Data Scientist",  employer: "",                  job: "Data Scientist", loc: "" },
+  { label: "Software Engineer", employer: "",                job: "Software Engineer", loc: "" },
+  { label: "San Francisco",   employer: "",                  job: "",  loc: "San Francisco" },
+  { label: "Seattle",         employer: "",                  job: "",  loc: "Seattle" },
+  { label: "New York",        employer: "",                  job: "",  loc: "New York" },
 ];
 
-// ─── STATE ──────────────────────────────────────────────────────────────────
-let results = null;
+let db, conn;
 let currentPage = 1;
+let totalCount = 0;
 let hasSearched = false;
+let sortCol = "wf";
+let sortDir = "DESC";
 
-// ─── DOM ────────────────────────────────────────────────────────────────────
+const SORT_COLS = [
+  { key: "e", label: "Employer" },
+  { key: "j", label: "Job Title" },
+  { key: "wf", label: "Base Salary" },
+  { key: "loc", label: "Location" },
+  { key: "bd", label: "Start" },
+  { key: "ed", label: "End" },
+];
+
 const $ = (id) => document.getElementById(id);
-const empInput = $("empInput"), jobInput = $("jobInput"), cityInput = $("cityInput");
-const empDropdown = $("empDropdown"), jobDropdown = $("jobDropdown"), cityDropdown = $("cityDropdown");
-const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), cityFieldInner = $("cityFieldInner");
+const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
+const empDropdown = $("empDropdown"), jobDropdown = $("jobDropdown"), locDropdown = $("locDropdown");
+const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), locFieldInner = $("locFieldInner");
 
-// ─── GraphQL helper ─────────────────────────────────────────────────────────
-async function gql(query, variables = {}) {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-    body: JSON.stringify({ query, variables }),
+async function initDB() {
+  const bundle = await duckdb.selectBundle({
+    mvp: {
+      mainModule: `${CDN}/duckdb-mvp.wasm`,
+      mainWorker: `${CDN}/duckdb-browser-mvp.worker.js`,
+    },
+    eh: {
+      mainModule: `${CDN}/duckdb-eh.wasm`,
+      mainWorker: `${CDN}/duckdb-browser-eh.worker.js`,
+    },
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  const json = await res.json();
-  if (json.errors) throw new Error(json.errors[0].message);
-  return json.data;
+  const worker = await duckdb.createWorker(bundle.mainWorker);
+  const logger = new duckdb.ConsoleLogger();
+  db = new duckdb.AsyncDuckDB(logger, worker);
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  conn = await db.connect();
+
+  const res = await fetch(PARQUET_URL);
+  if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
+  await db.registerFileBuffer("h1b.parquet", new Uint8Array(await res.arrayBuffer()));
+  await conn.query(`CREATE TABLE h1b AS SELECT * FROM read_parquet('h1b.parquet')`);
+  const cnt = (await conn.query(`SELECT count(*)::INTEGER AS c FROM h1b`)).toArray()[0].c;
+  console.log(`DuckDB ready: ${cnt} rows loaded`);
 }
 
-// ─── Formatting ─────────────────────────────────────────────────────────────
-function fmtUSD(val) {
-  if (!val) return "\u2014";
-  const n = parseFloat(val.replace(/[^0-9.-]/g, ""));
-  if (isNaN(n)) return val;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
-}
+const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
+searchBtn.disabled = true;
+searchBtnText.textContent = "Loading database\u2026";
+const dbReady = initDB().then(() => {
+  searchBtn.disabled = false;
+  searchBtnText.textContent = "Search Salaries";
+}).catch(err => {
+  searchBtnText.textContent = "Load failed";
+  console.error("DuckDB init failed:", err);
+});
 
-function fmtDate(val) {
-  if (!val) return "\u2014";
-  try {
-    const d = new Date(val);
-    if (isNaN(d.getTime())) return val;
-    return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}-${d.getFullYear()}`;
-  } catch { return val; }
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+function fmtUSD(v) { return (v == null || v === 0) ? "\u2014" : usd.format(v); }
+function fmtDate(v) {
+  if (!v) return "\u2014";
+  try { const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+  catch { return String(v); }
 }
+function esc(s) { return s.replace(/'/g, "''"); }
+function html(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
-// ─── Case variants for beginsWith (DynamoDB is case-sensitive) ──────────────
-function caseVariants(s) {
-  const v = [s, s.toLowerCase(), s.toUpperCase(),
-    s.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ")];
-  return v.filter((x, i) => v.indexOf(x) === i);
-}
-
-// ─── Suggestions ────────────────────────────────────────────────────────────
-async function fetchSuggestions(field, prefix) {
-  const p = prefix.trim();
+async function fetchSuggestions(col, prefix) {
+  await dbReady;
+  const p = esc(prefix.trim().toLowerCase());
   if (!p) return [];
-  const variants = caseVariants(p);
-  const filters = variants.map(v => `{ ${field}: { beginsWith: "${v.replace(/"/g, '\\"')}" } }`).join(", ");
-  const query = `query { listH1BS(limit: 50, filter: { or: [${filters}] }) { items { ${field} } } }`;
-  const data = await gql(query);
-  const items = (data.listH1BS?.items || []).map(r => r[field]).filter(Boolean);
-  const seen = new Set();
-  return items.filter(v => !seen.has(v) && seen.add(v)).slice(0, 8);
+  return (await conn.query(`SELECT DISTINCT ${col} AS v FROM h1b WHERE lower(${col}) LIKE '${p}%' ORDER BY v LIMIT 8`))
+    .toArray().map(r => r.v).filter(Boolean);
 }
 
-// ─── Search queries (using GSI query fields) ────────────────────────────────
-function buildSearchQuery(e, j, c) {
-  if (e && j && c) {
-    return `query($e:String!,$j:ModelStringKeyConditionInput) {
-      listH1BByEmployerNameAndJobTitle(employerName:$e, jobTitle:$j, limit:500) { items { ${FIELDS} } }
-    }`;
-  }
-  if (e && j) {
-    return `query($e:String!,$j:ModelStringKeyConditionInput) {
-      listH1BByEmployerNameAndJobTitle(employerName:$e, jobTitle:$j, limit:500) { items { ${FIELDS} } }
-    }`;
-  }
-  if (e && c) {
-    return `query($e:String!,$c:ModelStringKeyConditionInput) {
-      listH1BByEmployerNameAndWorksiteCity(employerName:$e, worksiteCity:$c, limit:500) { items { ${FIELDS} } }
-    }`;
-  }
-  if (j && c) {
-    return `query($j:String!,$c:ModelStringKeyConditionInput) {
-      listH1BByJobTitleAndWorksiteCity(jobTitle:$j, worksiteCity:$c, limit:500) { items { ${FIELDS} } }
-    }`;
-  }
-  if (e) return `query($e:String!) { listH1BByEmployerName(employerName:$e, limit:500) { items { ${FIELDS} } } }`;
-  if (j) return `query($j:String!) { listH1BByJobTitle(jobTitle:$j, limit:500) { items { ${FIELDS} } } }`;
-  if (c) return `query($c:String!) { listH1BByWorksiteCity(worksiteCity:$c, limit:500) { items { ${FIELDS} } } }`;
-  return `query { listH1BS(limit:25) { items { ${FIELDS} } } }`;
+async function doSearch(emp, job, loc) {
+  await dbReady;
+  const e = emp.trim(), j = job.trim(), l = loc.trim();
+  const w = [];
+  if (e) w.push(`lower(e) LIKE '%${esc(e.toLowerCase())}%'`);
+  if (j) w.push(`lower(j) LIKE '%${esc(j.toLowerCase())}%'`);
+  if (l) w.push(`lower(loc) LIKE '%${esc(l.toLowerCase())}%'`);
+  const clause = w.length ? `WHERE ${w.join(" AND ")}` : "";
+
+  totalCount = Number((await conn.query(`SELECT count(*)::INTEGER AS c FROM h1b ${clause}`)).toArray()[0].c);
+  const offset = (currentPage - 1) * PAGE_SIZE;
+  return (await conn.query(`SELECT e,j,wf,loc,bd,ed FROM h1b ${clause} ORDER BY ${sortCol} ${sortDir} NULLS LAST LIMIT ${PAGE_SIZE} OFFSET ${offset}`)).toArray();
 }
 
-function buildSearchVars(e, j, c) {
-  const vars = {};
-  if (e) vars.e = e;
-  if (j) vars.j = (e || c) ? { eq: j } : j;
-  if (c) vars.c = (e || j) ? { eq: c } : c;
-  return vars;
-}
-
-function extractResults(data, city) {
-  const key = Object.keys(data)[0];
-  let items = (data[key]?.items || []).filter(Boolean);
-  if (city && Object.keys(data)[0].includes("EmployerNameAndJobTitle")) {
-    items = items.filter(r => (r.worksiteCity || "").toLowerCase() === city.toLowerCase());
-  }
-  return items;
-}
-
-async function doSearch(emp, job, cty) {
-  const e = emp.trim(), j = job.trim(), c = cty.trim();
-  const query = buildSearchQuery(e, j, c);
-  const vars = buildSearchVars(e, j, c);
-  const data = await gql(query, vars);
-  return extractResults(data, (e && j && c) ? c : null);
-}
-
-// ─── Render ─────────────────────────────────────────────────────────────────
 function renderTable(records) {
   if (!records.length) return "";
-  const rows = records.map((r, i) => `
-    <tr style="animation-delay:${i*30}ms">
-      <td class="emp">${r.employerName || "\u2014"}</td>
-      <td>${r.jobTitle || "\u2014"}</td>
-      <td class="salary">${fmtUSD(r.wageRateOfPayFrom)}</td>
-      <td>${[r.worksiteCity, r.worksiteState].filter(Boolean).join(", ") || "\u2014"}</td>
-      <td style="white-space:nowrap">${fmtDate(r.receivedDate)}</td>
-      <td style="white-space:nowrap">${fmtDate(r.beginDate)}</td>
-    </tr>`).join("");
+  const rows = records.map((r, i) => `<tr style="animation-delay:${i * 25}ms">
+    <td class="emp">${html(r.e) || "\u2014"}</td>
+    <td class="job">${html(r.j) || "\u2014"}</td>
+    <td class="salary">${fmtUSD(r.wf)}</td>
+    <td class="loc">${html(r.loc) || "\u2014"}</td>
+    <td class="date">${fmtDate(r.bd)}</td>
+    <td class="date">${fmtDate(r.ed)}</td>
+  </tr>`).join("");
+
+  const cards = records.map((r, i) => `<div class="result-card" style="animation-delay:${i * 30}ms">
+    <div class="rc-emp">${html(r.e) || "\u2014"}</div>
+    <div class="rc-job">${html(r.j) || "\u2014"}</div>
+    <div class="rc-grid">
+      <div><div class="rc-label">Base Salary</div><div class="rc-val money">${fmtUSD(r.wf)}</div></div>
+      <div><div class="rc-label">Location</div><div class="rc-val">${html(r.loc) || "\u2014"}</div></div>
+      <div><div class="rc-label">Start</div><div class="rc-val">${fmtDate(r.bd)}</div></div>
+      <div><div class="rc-label">End</div><div class="rc-val">${fmtDate(r.ed)}</div></div>
+    </div>
+  </div>`).join("");
+
+  const ths = SORT_COLS.map(c => {
+    const active = sortCol === c.key;
+    const arrow = active ? (sortDir === "ASC" ? "\u25B2" : "\u25BC") : "\u25B2";
+    return `<th class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
+  }).join("");
+
   return `<div class="tbl-wrap"><div class="tbl-scroll"><table>
-    <thead><tr><th>Employer</th><th>Job Title</th><th>Base Salary</th><th>Location</th><th>Submit Date</th><th>Start Date</th></tr></thead>
-    <tbody>${rows}</tbody></table></div></div>`;
+    <thead><tr>${ths}</tr></thead>
+    <tbody>${rows}</tbody></table></div></div>
+    <div class="results-cards">${cards}</div>`;
 }
 
 function renderSkeleton() {
-  const rows = Array.from({length:5}, (_,i) =>
-    `<tr>${[140,90,100,90,90,90].map(w => `<td><div class="skeleton" style="height:15px;width:${w}px"></div></td>`).join("")}</tr>`
+  const r = Array.from({length: 5}, () =>
+    `<tr>${[1,1,1,1,1,1].map(() => `<td><div class="skeleton" style="height:14px;width:${60 + Math.random() * 60}px"></div></td>`).join("")}</tr>`
   ).join("");
+  const ths = SORT_COLS.map(c => `<th>${c.label}</th>`).join("");
   return `<div class="tbl-wrap"><div class="tbl-scroll"><table>
-    <thead><tr><th>Employer</th><th>Job Title</th><th>Base Salary</th><th>Location</th><th>Submit Date</th><th>Start Date</th></tr></thead>
-    <tbody>${rows}</tbody></table></div></div>`;
+    <thead><tr>${ths}</tr></thead>
+    <tbody>${r}</tbody></table></div></div>`;
 }
 
 function renderPager() {
-  if (!results || results.length <= PAGE_SIZE) { $("pagerContainer").classList.add("hidden"); return; }
-  const total = Math.ceil(results.length / PAGE_SIZE);
-  const start = (currentPage - 1) * PAGE_SIZE + 1;
-  const end = Math.min(currentPage * PAGE_SIZE, results.length);
+  if (totalCount <= PAGE_SIZE) { $("pagerContainer").classList.add("hidden"); return; }
+  const tp = Math.ceil(totalCount / PAGE_SIZE);
+  const s = (currentPage - 1) * PAGE_SIZE + 1, e = Math.min(currentPage * PAGE_SIZE, totalCount);
   $("pagerContainer").classList.remove("hidden");
   $("pagerContainer").innerHTML = `
-    <span class="pager-info">Showing ${start}\u2013${end} of ${results.length}</span>
+    <span class="pager-info">${s}\u2013${e} of ${totalCount.toLocaleString()}</span>
     <div class="pager-btns">
-      <button class="pager-btn" id="prevBtn" ${currentPage<=1?"disabled":""}>&#9664; Prev</button>
-      <span class="pager-page">Page ${currentPage} of ${total}</span>
-      <button class="pager-btn" id="nextBtn" ${currentPage>=total?"disabled":""}>Next &#9654;</button>
+      <button class="pager-btn" id="prevBtn" ${currentPage <= 1 ? "disabled" : ""}>Prev</button>
+      <span class="pager-page">${currentPage} / ${tp.toLocaleString()}</span>
+      <button class="pager-btn" id="nextBtn" ${currentPage >= tp ? "disabled" : ""}>Next</button>
     </div>`;
-  $("prevBtn").onclick = () => { if (currentPage > 1) { currentPage--; showPage(); } };
-  $("nextBtn").onclick = () => { if (currentPage < total) { currentPage++; showPage(); } };
+  $("prevBtn").onclick = () => { if (currentPage > 1) { currentPage--; runPage(); } };
+  $("nextBtn").onclick = () => { if (currentPage < tp) { currentPage++; runPage(); } };
 }
 
-function showPage() {
-  if (!results) return;
-  const page = results.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
-  $("tableContainer").innerHTML = renderTable(page);
+function bindSortHeaders() {
+  $("tableContainer").querySelectorAll("th[data-col]").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortDir = sortDir === "ASC" ? "DESC" : "ASC";
+      } else {
+        sortCol = col;
+        sortDir = (col === "wf") ? "DESC" : "ASC";
+      }
+      currentPage = 1;
+      runPage();
+    });
+  });
+}
+
+async function runPage() {
+  const r = await doSearch(empInput.value, jobInput.value, locInput.value);
+  $("tableContainer").innerHTML = renderTable(r);
   $("tableContainer").classList.remove("hidden");
   renderPager();
+  bindSortHeaders();
 }
 
-function showResults() {
-  const wrap = $("resultsWrap");
-  wrap.classList.add("show");
+function showResults(records) {
+  $("resultsWrap").classList.add("show");
   $("errorBox").classList.add("hidden");
   $("noResults").classList.add("hidden");
   $("skeletonTable").innerHTML = "";
   $("tableContainer").classList.add("hidden");
   $("pagerContainer").classList.add("hidden");
-
-  if (!results) return;
-  $("resultsBadge").textContent = `${results.length} record${results.length !== 1 ? "s" : ""}`;
-  if (results.length === 0) { $("noResults").classList.remove("hidden"); return; }
-  showPage();
+  $("resultsBadge").textContent = `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
+  if (totalCount === 0) { $("noResults").classList.remove("hidden"); return; }
+  $("tableContainer").innerHTML = renderTable(records);
+  $("tableContainer").classList.remove("hidden");
+  renderPager();
+  bindSortHeaders();
 }
 
-// ─── Suggestion dropdown wiring ─────────────────────────────────────────────
-function wireField(input, dropdown, fieldInner, fieldName) {
-  let timer = null;
+function wireField(input, dropdown, fieldInner, col) {
+  let t = null;
   input.addEventListener("focus", () => fieldInner.classList.add("focused"));
-  input.addEventListener("blur", () => { fieldInner.classList.remove("focused"); setTimeout(() => { dropdown.classList.remove("open"); }, 200); });
+  input.addEventListener("blur", () => { fieldInner.classList.remove("focused"); setTimeout(() => dropdown.classList.remove("open"), 180); });
   input.addEventListener("input", () => {
-    clearTimeout(timer);
-    const val = input.value.trim();
-    if (val.length < 2 || hasSearched) { dropdown.classList.remove("open"); return; }
-    dropdown.innerHTML = `<div class="dropdown-loading"><svg class="spinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Finding matches\u2026</div>`;
+    clearTimeout(t);
+    const v = input.value.trim();
+    if (v.length < 2 || hasSearched) { dropdown.classList.remove("open"); return; }
+    dropdown.innerHTML = `<div class="dropdown-loading"><svg class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Finding\u2026</div>`;
     dropdown.classList.add("open");
-    timer = setTimeout(async () => {
+    t = setTimeout(async () => {
       try {
-        const items = await fetchSuggestions(fieldName, val);
+        const items = await fetchSuggestions(col, v);
         if (!items.length) { dropdown.classList.remove("open"); return; }
-        dropdown.innerHTML = items.map(s => `<div class="dropdown-item">${s}</div>`).join("");
+        dropdown.innerHTML = items.map(s => `<div class="dropdown-item">${html(s)}</div>`).join("");
         dropdown.classList.add("open");
-        dropdown.querySelectorAll(".dropdown-item").forEach(el => {
-          el.addEventListener("mousedown", (e) => { e.preventDefault(); input.value = el.textContent; dropdown.classList.remove("open"); });
-        });
+        dropdown.querySelectorAll(".dropdown-item").forEach(el =>
+          el.addEventListener("mousedown", ev => { ev.preventDefault(); input.value = el.textContent; dropdown.classList.remove("open"); }));
       } catch { dropdown.classList.remove("open"); }
-    }, 300);
+    }, 120);
   });
 }
+wireField(empInput, empDropdown, empFieldInner, "e");
+wireField(jobInput, jobDropdown, jobFieldInner, "j");
+wireField(locInput, locDropdown, locFieldInner, "loc");
 
-wireField(empInput, empDropdown, empFieldInner, "employerName");
-wireField(jobInput, jobDropdown, jobFieldInner, "jobTitle");
-wireField(cityInput, cityDropdown, cityFieldInner, "worksiteCity");
-
-// ─── Search handler ─────────────────────────────────────────────────────────
-$("searchForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const btn = $("searchBtn"), txt = $("searchBtnText");
+$("searchForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
   hasSearched = true;
-  btn.disabled = true;
-  txt.textContent = "Searching\u2026";
-  results = null;
-  currentPage = 1;
+  searchBtn.disabled = true;
+  searchBtnText.textContent = "Searching\u2026";
+  currentPage = 1; totalCount = 0; sortCol = "wf"; sortDir = "DESC";
   $("resultsWrap").classList.add("show");
   $("errorBox").classList.add("hidden");
   $("noResults").classList.add("hidden");
@@ -434,38 +468,32 @@ $("searchForm").addEventListener("submit", async (e) => {
   $("pagerContainer").classList.add("hidden");
   $("skeletonTable").innerHTML = renderSkeleton();
   $("resultsBadge").textContent = "";
-
   try {
-    results = await doSearch(empInput.value, jobInput.value, cityInput.value);
-    showResults();
+    await dbReady;
+    showResults(await doSearch(empInput.value, jobInput.value, locInput.value));
     $("resultsWrap").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     $("errorMsg").textContent = err.message || "Search failed.";
     $("errorBox").classList.remove("hidden");
     $("skeletonTable").innerHTML = "";
-    results = [];
     $("resultsBadge").textContent = "0 records";
   } finally {
-    btn.disabled = false;
-    txt.textContent = "Search Salaries";
+    searchBtn.disabled = false;
+    searchBtnText.textContent = "Search Salaries";
   }
 });
 
-// ─── Clear ──────────────────────────────────────────────────────────────────
 function updateClearBtn() {
-  const has = empInput.value.trim() || jobInput.value.trim() || cityInput.value.trim();
-  $("clearBtn").classList.toggle("show", !!has);
+  $("clearBtn").classList.toggle("show", !!(empInput.value.trim() || jobInput.value.trim() || locInput.value.trim()));
 }
-[empInput, jobInput, cityInput].forEach(el => el.addEventListener("input", updateClearBtn));
-
+[empInput, jobInput, locInput].forEach(el => el.addEventListener("input", updateClearBtn));
 $("clearBtn").addEventListener("click", () => {
-  empInput.value = ""; jobInput.value = ""; cityInput.value = "";
-  results = null; hasSearched = false; currentPage = 1;
+  empInput.value = ""; jobInput.value = ""; locInput.value = "";
+  hasSearched = false; currentPage = 1; totalCount = 0;
   $("resultsWrap").classList.remove("show");
   updateClearBtn();
 });
 
-// ─── Popular tags ───────────────────────────────────────────────────────────
 const popularContainer = document.querySelector(".popular");
 POPULAR.forEach(item => {
   const btn = document.createElement("button");
@@ -475,8 +503,8 @@ POPULAR.forEach(item => {
   btn.addEventListener("click", () => {
     empInput.value = item.employer;
     jobInput.value = item.job;
-    cityInput.value = item.city;
-    results = null; hasSearched = false;
+    locInput.value = item.loc || "";
+    hasSearched = false;
     $("resultsWrap").classList.remove("show");
     updateClearBtn();
   });

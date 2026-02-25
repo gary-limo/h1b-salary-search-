@@ -1,8 +1,9 @@
-node_modules/
-.npm/
-.amplify/
-amplify_outputs*
-.DS_Store
+# Source data (large CSVs - parquet is built from these)
+output_*.csv
+*.csv
 
-# local scripts (CSV import — run manually, not in build)
-/scripts/
+# Node
+node_modules/
+
+# OS
+.DS_Store
