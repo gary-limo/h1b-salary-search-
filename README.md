@@ -1,26 +1,9 @@
 # H1B Salary Search
 
-Search H1B visa salary data from the U.S. Department of Labor. Free, fast, open source.
+Search H1B visa salaries. Free, fast, open source. Data source from US DoL.
 
-**Tech:** Plain HTML/JS, DuckDB-WASM, Parquet. No backend, no API, no build step.
+Plain HTML/JS, DuckDB-WASM, Parquet. No backend, no API, no build step.
 
-## Deploy (pick one)
-
-### GitHub Pages (free, ~1 min)
-
-1. Push this repo to GitHub
-2. **Settings → Pages → Source:** Deploy from branch `main`, folder `/ (root)`
-3. Site live at `https://<username>.github.io/<repo>/`
-
-### Vercel (free)
-
-```bash
-npx vercel
-```
-
-### Netlify (free)
-
-Drag the folder into [netlify.com/drop](https://app.netlify.com/drop)
 
 ### Cloudflare Pages (free)
 
