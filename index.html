@@ -559,6 +559,7 @@ wireField(jobInput, jobDropdown, jobFieldInner, "j");
 wireField(locInput, locDropdown, locFieldInner, "loc");
 
 async function executeSearch() {
+  [empDropdown, jobDropdown, locDropdown].forEach(d => d.classList.remove("open"));
   hasSearched = true;
   searchBtn.disabled = true;
   searchBtnText.textContent = "Searching\u2026";
