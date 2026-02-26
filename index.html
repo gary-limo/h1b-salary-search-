@@ -80,27 +80,27 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .nav-link{color:#C4A35A;text-decoration:none;font-weight:500}
 .nav-link:hover{color:#fff;text-decoration:underline}
 
-.hero{position:relative;background:linear-gradient(135deg,#1B2A4A 0%,#243560 50%,#1B2A4A 100%);padding:40px 24px 56px;overflow:hidden}
+.hero{position:relative;background:linear-gradient(135deg,#1B2A4A 0%,#243560 50%,#1B2A4A 100%);padding:40px 24px 56px;overflow:visible}
 .hero h1{font-size:clamp(28px,5vw,44px);font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.1;margin-bottom:14px;text-align:center}
 .hero h1 .accent{color:#C4A35A;position:relative;display:inline-block}
 .hero h1 .accent::after{content:"";position:absolute;bottom:-3px;left:0;right:0;height:2px;background:linear-gradient(90deg,#C4A35A,transparent);border-radius:2px}
 
-.search-box{max-width:680px;margin:0 auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px;backdrop-filter:blur(8px)}
-.search-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;position:relative;z-index:10}
-.field-wrap{position:relative}
+.search-box{max-width:680px;margin:0 auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px}
+.search-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;position:relative;z-index:100}
+.field-wrap{position:relative;z-index:100}
 .field-inner{position:relative;background:rgba(255,255,255,.95);border-radius:10px;border:1.5px solid transparent;transition:border .15s,box-shadow .15s}
 .field-inner.focused{background:#fff;border-color:#C4A35A;box-shadow:0 0 0 3px rgba(196,163,90,.18)}
 .field-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:rgba(27,42,74,.35);pointer-events:none;transition:color .15s;display:flex}
 .field-inner.focused .field-icon{color:#1B2A4A}
 .field-input{width:100%;height:40px;padding-left:32px;padding-right:10px;border:none;border-radius:10px;background:transparent;font-size:13px;color:#1B2A4A;outline:none;font-family:inherit}
-.dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:200;background:#fff;border-radius:10px;border:1px solid #E2DDD6;box-shadow:0 8px 24px rgba(27,42,74,.12);overflow:hidden;display:none}
+.dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:300;background:#fff;border-radius:10px;border:1px solid #E2DDD6;box-shadow:0 8px 24px rgba(27,42,74,.12);display:none;max-height:240px;overflow-y:auto}
 .dropdown.open{display:block}
 .dropdown-item{padding:8px 14px;font-size:13px;color:#1B2A4A;cursor:pointer;transition:background .1s}
 .dropdown-item:hover{background:rgba(196,163,90,.08)}
 .dropdown-item+.dropdown-item{border-top:1px solid #F0ECE8}
 .dropdown-loading{padding:10px 14px;font-size:12px;color:#9CA3AF;display:flex;align-items:center;gap:6px}
 
-.btn-row{display:flex;gap:8px;position:relative;z-index:1}
+.btn-row{display:flex;gap:8px;position:relative}
 .btn-search{flex:1;height:42px;background:#C41E3A;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;letter-spacing:-.2px}
 .btn-search:hover{background:#A01830}
 .btn-search:disabled{background:#9B1629;cursor:not-allowed}
@@ -108,7 +108,15 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .btn-clear:hover{background:rgba(255,255,255,.18)}
 .btn-clear.show{display:flex}
 
-.popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;position:relative;z-index:2}
+.load-progress{margin-top:10px;display:none;position:relative;z-index:1}
+.load-progress.show{display:block}
+.load-bar-wrap{height:6px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden}
+.load-bar{height:100%;width:0%;background:linear-gradient(90deg,#C4A35A,#E8D48B);border-radius:99px;transition:width .2s ease}
+.load-status{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.load-text{font-size:11px;color:rgba(255,255,255,.5)}
+.load-pct{font-size:11px;color:#C4A35A;font-weight:600;font-variant-numeric:tabular-nums}
+
+.popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;position:relative;z-index:1}
 .popular-label{font-size:11px;color:rgba(255,255,255,.35);align-self:center;margin-right:2px}
 .popular-btn{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;transition:all .15s}
 .popular-btn:hover{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(196,163,90,.4)}
@@ -250,6 +258,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
+      <div class="load-progress" id="loadProgress">
+        <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
+        <div class="load-status">
+          <span class="load-text" id="loadText">Initializing engine…</span>
+          <span class="load-pct" id="loadPct">0%</span>
+        </div>
+      </div>
     </form>
 
     <div class="popular">
@@ -330,7 +345,16 @@ const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput
 const empDropdown = $("empDropdown"), jobDropdown = $("jobDropdown"), locDropdown = $("locDropdown");
 const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), locFieldInner = $("locFieldInner");
 
+function setProgress(pct, text) {
+  $("loadBar").style.width = `${pct}%`;
+  $("loadPct").textContent = `${Math.round(pct)}%`;
+  if (text) $("loadText").textContent = text;
+}
+
 async function initDB() {
+  $("loadProgress").classList.add("show");
+  setProgress(5, "Initializing engine\u2026");
+
   const bundle = await duckdb.selectBundle({
     mvp: {
       mainModule: `${CDN}/duckdb-mvp.wasm`,
@@ -341,16 +365,40 @@ async function initDB() {
       mainWorker: `${CDN}/duckdb-browser-eh.worker.js`,
     },
   });
+  setProgress(15, "Loading DuckDB engine\u2026");
   const worker = await duckdb.createWorker(bundle.mainWorker);
   const logger = { log: () => {}, warn: () => {}, error: () => {}, info: () => {}, debug: () => {} };
   db = new duckdb.AsyncDuckDB(logger, worker);
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   conn = await db.connect();
+  setProgress(25, "Downloading data\u2026");
 
   const res = await fetch(PARQUET_URL);
   if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
-  await db.registerFileBuffer("h1b.parquet", new Uint8Array(await res.arrayBuffer()));
+  const total = Number(res.headers.get("content-length")) || 0;
+  let loaded = 0;
+  const reader = res.body.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    if (total) {
+      const dlPct = 25 + (loaded / total) * 60;
+      setProgress(dlPct, `Downloading data\u2026 ${(loaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB`);
+    } else {
+      setProgress(50, `Downloading data\u2026 ${(loaded / 1048576).toFixed(1)} MB`);
+    }
+  }
+  const buf = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
+
+  setProgress(88, "Building index\u2026");
+  await db.registerFileBuffer("h1b.parquet", buf);
   await conn.query(`CREATE TABLE h1b AS SELECT * FROM read_parquet('h1b.parquet')`);
+  setProgress(100, "Ready!");
 }
 
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
@@ -359,8 +407,10 @@ searchBtnText.textContent = "Loading database\u2026";
 const dbReady = initDB().then(() => {
   searchBtn.disabled = false;
   searchBtnText.textContent = "Search Salaries";
+  setTimeout(() => $("loadProgress").classList.remove("show"), 600);
 }).catch(() => {
   searchBtnText.textContent = "Load failed";
+  setProgress(0, "Load failed");
 });
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
