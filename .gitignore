@@ -8,6 +8,10 @@ node_modules/
 # OS
 .DS_Store
 
+# SQLite DB (regenerate with scripts/create_db.py)
+h1b_wages.db
+h1b_wages_export.sql
+
 # wrangler files
 .wrangler
 .dev.vars*

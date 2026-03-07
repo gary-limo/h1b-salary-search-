@@ -1,14 +1,21 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "h1b-salary-search",
+  "main": "src/index.js",
   "compatibility_date": "2025-09-27",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": "."
+    "directory": "./public",
+    "binding": "ASSETS"
   },
-  "compatibility_flags": [
-    "nodejs_compat"
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "h1b-wages",
+      "database_id": "ccf362fd-f4d0-4bb2-b17e-7ac0c9055af5"
+    }
   ]
 }
