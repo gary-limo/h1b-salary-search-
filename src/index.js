@@ -63,6 +63,15 @@ export default {
         return jsonResponse({ error: "Method not allowed" }, 405, buildCorsHeaders(request));
       }
 
+      // Rate limit: 60 API requests per minute per IP
+      const ip = request.headers.get("cf-connecting-ip") || "unknown";
+      if (env.API_RATE_LIMITER) {
+        const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return jsonResponse({ error: "Too many requests. Please try again later." }, 429, buildCorsHeaders(request));
+        }
+      }
+
       const cors = buildCorsHeaders(request);
 
       if (url.pathname === "/api/search") {
