@@ -140,6 +140,8 @@ tbody tr:nth-child(even){background:#FCFBF9}
 tbody tr:nth-child(even):hover{background:#F8F6F3}
 td{padding:10px 14px;font-size:13px;color:#1B2A4A;border-bottom:1px solid #F0ECE8}
 tbody tr:last-child td{border-bottom:none}
+tbody tr.clickable{cursor:pointer}
+tbody tr.clickable:hover td:first-child{color:#C41E3A;text-decoration:underline}
 td.emp{white-space:normal;word-break:break-word}
 td.job{white-space:normal;word-break:break-word;min-width:180px}
 
@@ -370,7 +372,7 @@ function html(s) {
 function renderTable(records) {
   if (!records.length) return "";
 
-  const rows = records.map((r, i) => `<tr style="animation-delay:${i * 25}ms">
+  const rows = records.map((r, i) => `<tr class="clickable" data-id="${r.id}" style="animation-delay:${i * 25}ms">
     <td class="emp">${html(r.employer_name)}</td>
     <td class="job">${html(r.job_title)}</td>
     <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
@@ -379,7 +381,7 @@ function renderTable(records) {
     <td class="date">${html(r.end_date)}</td>
   </tr>`).join("");
 
-  const cards = records.map((r, i) => `<div class="result-card" style="animation-delay:${i * 30}ms">
+  const cards = records.map((r, i) => `<div class="result-card clickable" data-id="${r.id}" style="animation-delay:${i * 30}ms;cursor:pointer">
     <div class="rc-emp">${html(r.employer_name)}</div>
     <div class="rc-job">${html(r.job_title)}</div>
     <div class="rc-grid">
@@ -448,6 +450,19 @@ function bindSortHeaders() {
   });
 }
 
+function bindRowClicks() {
+  $("tableContainer").querySelectorAll("tr.clickable[data-id]").forEach(tr => {
+    tr.addEventListener("click", () => {
+      window.open(`/record?id=${tr.dataset.id}`, "_blank");
+    });
+  });
+  document.querySelectorAll(".result-card.clickable[data-id]").forEach(card => {
+    card.addEventListener("click", () => {
+      window.open(`/record?id=${card.dataset.id}`, "_blank");
+    });
+  });
+}
+
 // ─── Search flow ─────────────────────────────────────────────────────────────
 
 async function runPage() {
@@ -464,6 +479,7 @@ async function runPage() {
     }
     renderPager();
     bindSortHeaders();
+    bindRowClicks();
   } catch (err) {
     $("errorMsg").textContent = err.message || "Search failed.";
     $("errorBox").classList.remove("hidden");

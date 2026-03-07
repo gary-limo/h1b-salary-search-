@@ -70,6 +70,9 @@ export default {
       if (url.pathname === "/api/suggest") {
         return handleSuggest(url.searchParams, env.DB, cors);
       }
+      if (url.pathname === "/api/record") {
+        return handleRecord(url.searchParams, env.DB, cors);
+      }
 
       return jsonResponse({ error: "Not found" }, 404, cors);
     }
@@ -119,7 +122,7 @@ async function handleSearch(params, db, cors) {
         .first(),
       db
         .prepare(
-          `SELECT employer_name, job_title,
+          `SELECT id, employer_name, job_title,
                   wage_rate_of_pay_from,
                   worksite_city, worksite_state,
                   begin_date, end_date
@@ -144,6 +147,36 @@ async function handleSearch(params, db, cors) {
   } catch (err) {
     console.error("Search error:", err);
     return jsonResponse({ error: "Search failed. Please try again." }, 500, cors);
+  }
+}
+
+async function handleRecord(params, db, cors) {
+  const id = parseInt(params.get("id") || "0", 10);
+  if (!id || id < 1) {
+    return jsonResponse({ error: "Invalid record ID." }, 400, cors);
+  }
+  try {
+    const row = await db
+      .prepare(
+        `SELECT id, case_number, job_title, soc_code, soc_title,
+                begin_date, end_date,
+                employer_name, employer_address1, employer_address2,
+                employer_city, employer_state, employer_postal_code, employer_country,
+                worksite_address1, worksite_address2, worksite_city, worksite_county,
+                worksite_state, worksite_postal_code,
+                wage_rate_of_pay_from, wage_rate_of_pay_to, prevailing_wage, pw_wage_level
+         FROM h1b_wages WHERE id = ?`
+      )
+      .bind(id)
+      .first();
+
+    if (!row) {
+      return jsonResponse({ error: "Record not found." }, 404, cors);
+    }
+    return jsonResponse({ result: row }, 200, cors);
+  } catch (err) {
+    console.error("Record error:", err);
+    return jsonResponse({ error: "Failed to load record." }, 500, cors);
   }
 }
 
