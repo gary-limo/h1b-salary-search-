@@ -47,6 +47,16 @@ export default {
       return new Response("Not Found", { status: 404 });
     }
 
+    // Pretty record URLs: /record and /record/<case_number> should serve record page
+    if (url.pathname === "/record" || url.pathname.startsWith("/record/")) {
+      const pageUrl = new URL(request.url);
+      pageUrl.pathname = "/record.html";
+      if (url.pathname.startsWith("/record/")) {
+        pageUrl.search = "";
+      }
+      return env.ASSETS.fetch(new Request(pageUrl.toString(), request));
+    }
+
     // Delegate API requests to handlers (including CORS preflight)
     if (url.pathname.startsWith("/api/")) {
       if (!isSameOrigin(request)) {
@@ -128,7 +138,7 @@ async function handleSearch(params, db, cors) {
         .first(),
       db
         .prepare(
-          `SELECT id, employer_name, job_title,
+          `SELECT case_number, employer_name, job_title,
                   wage_rate_of_pay_from,
                   worksite_city, worksite_state,
                   begin_date, end_date
@@ -157,23 +167,30 @@ async function handleSearch(params, db, cors) {
 }
 
 async function handleRecord(params, db, cors) {
+  const caseNumber = (params.get("case") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const id = parseInt(params.get("id") || "0", 10);
-  if (!id || id < 1 || !Number.isFinite(id)) {
-    return jsonResponse({ error: "Invalid record ID." }, 400, cors);
+  const useCaseNumber = caseNumber.length > 0;
+
+  if (!useCaseNumber && (!id || id < 1 || !Number.isFinite(id))) {
+    return jsonResponse({ error: "Invalid record reference." }, 400, cors);
   }
   try {
+    const whereSql = useCaseNumber ? "case_number = ?" : "id = ?";
+    const whereValue = useCaseNumber ? caseNumber : id;
+
     const row = await db
       .prepare(
-        `SELECT id, case_number, job_title, soc_code, soc_title,
+        `SELECT case_number, job_title, soc_code, soc_title,
                 begin_date, end_date,
                 employer_name, employer_address1, employer_address2,
                 employer_city, employer_state, employer_postal_code, employer_country,
                 worksite_address1, worksite_address2, worksite_city, worksite_county,
                 worksite_state, worksite_postal_code,
                 wage_rate_of_pay_from, wage_rate_of_pay_to, prevailing_wage, pw_wage_level
-         FROM h1b_wages WHERE id = ?`
+         FROM h1b_wages WHERE ${whereSql}
+         LIMIT 1`
       )
-      .bind(id)
+      .bind(whereValue)
       .first();
 
     if (!row) {

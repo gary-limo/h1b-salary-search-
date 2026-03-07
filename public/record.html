@@ -185,8 +185,18 @@ function cityStateZip(city, state, zip) {
   return [city, state, zip].filter(Boolean).join(", ") || null;
 }
 
-async function loadRecord(id) {
-  const res = await fetch(`/api/record?id=${encodeURIComponent(id)}`);
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+}
+
+async function loadRecord(recordRef) {
+  const isLegacyId = /^\d+$/.test(recordRef);
+  const key = isLegacyId ? "id" : "case";
+  const res = await fetch(`/api/record?${key}=${encodeURIComponent(recordRef)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Error ${res.status}`);
@@ -196,17 +206,21 @@ async function loadRecord(id) {
 
 async function init() {
   const params = new URLSearchParams(location.search);
-  const id = params.get("id");
+  const pathMatch = location.pathname.match(/^\/record\/(.+)$/);
+  const caseFromPath = pathMatch ? safeDecode(pathMatch[1]) : "";
+  const caseFromQuery = (params.get("case") || "").trim();
+  const idFromQuery = (params.get("id") || "").trim();
+  const recordRef = caseFromPath || caseFromQuery || idFromQuery;
 
-  if (!id || isNaN(id)) {
+  if (!recordRef) {
     document.getElementById("pageTitle").textContent = "Record not found";
-    document.getElementById("errorMsg").textContent = "No valid record ID provided.";
+    document.getElementById("errorMsg").textContent = "No valid record reference provided.";
     document.getElementById("errorBox").style.display = "flex";
     return;
   }
 
   try {
-    const r = await loadRecord(id);
+    const r = await loadRecord(recordRef);
 
     document.title = `${r.employer_name || "H1B Record"} – ${r.job_title || ""} | H1B Salary Search`;
     document.getElementById("pageTitle").textContent = r.employer_name || "H1B Record";
