@@ -216,27 +216,24 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
             <div class="field-icon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
             </div>
-            <input class="field-input" id="empInput" type="text" placeholder="Employer" aria-label="Employer" autocomplete="new-password">
+            <input class="field-input" id="empInput" type="text" placeholder="Employer (e.g. Intel)" aria-label="Employer" autocomplete="off">
           </div>
-          <div class="dropdown" id="empDropdown"></div>
         </div>
         <div class="field-wrap">
           <div class="field-inner" id="jobFieldInner">
             <div class="field-icon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
             </div>
-            <input class="field-input" id="jobInput" type="text" placeholder="Job title" aria-label="Job title" autocomplete="new-password">
+            <input class="field-input" id="jobInput" type="text" placeholder="Job title (e.g. Software Engineer)" aria-label="Job title" autocomplete="off">
           </div>
-          <div class="dropdown" id="jobDropdown"></div>
         </div>
         <div class="field-wrap">
           <div class="field-inner" id="locFieldInner">
             <div class="field-icon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
-            <input class="field-input" id="locInput" type="text" placeholder="Location" aria-label="Location" autocomplete="new-password">
+            <input class="field-input" id="locInput" type="text" placeholder="Location (e.g. Seattle)" aria-label="Location" autocomplete="off">
           </div>
-          <div class="dropdown" id="locDropdown"></div>
         </div>
       </div>
       <div class="btn-row">
@@ -319,7 +316,6 @@ let sortDir     = "DESC";
 
 const $ = (id) => document.getElementById(id);
 const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
-const empDropdown = $("empDropdown"), jobDropdown = $("jobDropdown"), locDropdown = $("locDropdown");
 const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), locFieldInner = $("locFieldInner");
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
 
@@ -344,13 +340,6 @@ async function apiSearch(emp, job, loc) {
   return data.results;
 }
 
-async function apiSuggest(field, q) {
-  if (q.length < 2) return [];
-  const res = await fetch(`/api/suggest?field=${field}&q=${encodeURIComponent(q)}`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results || [];
-}
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -489,7 +478,6 @@ async function runPage() {
 }
 
 async function executeSearch() {
-  [empDropdown, jobDropdown, locDropdown].forEach(d => d.classList.remove("open"));
   hasSearched  = true;
   currentPage  = 1;
   totalCount   = 0;
@@ -522,43 +510,13 @@ $("searchForm").addEventListener("submit", async ev => {
   await executeSearch();
 });
 
-// ─── Autocomplete ─────────────────────────────────────────────────────────────
+// ─── Field focus styles ───────────────────────────────────────────────────────
 
-function wireField(input, dropdown, fieldInner, field) {
-  let timer = null;
-  input.addEventListener("focus", () => fieldInner.classList.add("focused"));
-  input.addEventListener("blur",  () => {
-    fieldInner.classList.remove("focused");
-    setTimeout(() => dropdown.classList.remove("open"), 180);
+[{input: empInput, inner: empFieldInner}, {input: jobInput, inner: jobFieldInner}, {input: locInput, inner: locFieldInner}]
+  .forEach(({input, inner}) => {
+    input.addEventListener("focus", () => inner.classList.add("focused"));
+    input.addEventListener("blur",  () => inner.classList.remove("focused"));
   });
-  input.addEventListener("input", () => {
-    clearTimeout(timer);
-    const v = input.value.trim();
-    if (v.length < 2) { dropdown.classList.remove("open"); return; }
-    dropdown.innerHTML = `<div class="dropdown-loading">
-      <svg class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>Finding\u2026</div>`;
-    dropdown.classList.add("open");
-    timer = setTimeout(async () => {
-      const items = await apiSuggest(field, v);
-      if (!items.length) { dropdown.classList.remove("open"); return; }
-      dropdown.innerHTML = items.map(s => `<div class="dropdown-item">${html(s)}</div>`).join("");
-      dropdown.classList.add("open");
-      dropdown.querySelectorAll(".dropdown-item").forEach(el =>
-        el.addEventListener("mousedown", ev => {
-          ev.preventDefault();
-          input.value = el.textContent;
-          dropdown.classList.remove("open");
-        })
-      );
-    }, 150);
-  });
-}
-
-wireField(empInput, empDropdown, empFieldInner, "employer");
-wireField(jobInput, jobDropdown, jobFieldInner, "job");
-wireField(locInput, locDropdown, locFieldInner, "location");
 
 // ─── Clear button ─────────────────────────────────────────────────────────────
 
