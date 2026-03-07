@@ -141,8 +141,11 @@ tbody tr:nth-child(even):hover{background:#F8F6F3}
 td{padding:10px 14px;font-size:13px;color:#1B2A4A;border-bottom:1px solid #F0ECE8}
 tbody tr:last-child td{border-bottom:none}
 tbody tr.clickable{cursor:pointer}
-tbody tr.clickable:hover td:first-child{color:#C41E3A;text-decoration:underline}
+tbody tr.clickable:hover td:first-child .emp-link{color:#A01830}
 td.emp{white-space:normal;word-break:break-word}
+.emp-link{color:#C41E3A;text-decoration:underline;font-weight:600;cursor:pointer}
+.emp-link:hover{color:#A01830}
+.result-card .rc-emp.emp-link{display:inline-block;margin-bottom:2px}
 td.job{white-space:normal;word-break:break-word;min-width:180px}
 
 .results-cards{display:none}
@@ -178,7 +181,8 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
   .tbl-wrap{display:none}
   .results-cards{display:block}
   .result-card{background:#fff;border:1px solid #E8E4DF;border-radius:10px;padding:14px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.03);animation:fadeUp .25s ease both}
-  .result-card .rc-emp{font-weight:700;color:#1B2A4A;font-size:14px;margin-bottom:2px}
+  .result-card .rc-emp{font-weight:700;font-size:14px;margin-bottom:2px}
+  .result-card .rc-emp.emp-link{color:#C41E3A;text-decoration:underline}
   .result-card .rc-job{color:#4A5568;font-size:13px;margin-bottom:8px}
   .result-card .rc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
   .result-card .rc-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#8896A6;font-weight:600}
@@ -362,7 +366,7 @@ function renderTable(records) {
   if (!records.length) return "";
 
   const rows = records.map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
-    <td class="emp">${html(r.employer_name)}</td>
+    <td class="emp"><a href="/record?id=${html(r.id)}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a></td>
     <td class="job">${html(r.job_title)}</td>
     <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
     <td class="loc">${html(fmtLoc(r))}</td>
@@ -371,7 +375,7 @@ function renderTable(records) {
   </tr>`).join("");
 
   const cards = records.map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
-    <div class="rc-emp">${html(r.employer_name)}</div>
+    <a href="/record?id=${html(r.id)}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a>
     <div class="rc-job">${html(r.job_title)}</div>
     <div class="rc-grid">
       <div><div class="rc-label">Base Salary</div><div class="rc-val money">${fmtUSD(r.wage_rate_of_pay_from)}</div></div>
