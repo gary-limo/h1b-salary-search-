@@ -222,12 +222,13 @@ function jsonResponse(body, status, extraHeaders) {
 }
 
 /**
- * Returns true when the request either has no Origin header (direct/same-origin)
- * or the Origin's hostname matches the Worker's own hostname.
+ * Returns true only when the Origin header is present and matches the Worker's host.
+ * Rejects: curl, Postman, scripts (no Origin), other sites (wrong Origin).
+ * Browsers always send Origin for fetch/XHR from a page.
  */
 function isSameOrigin(request) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
+  if (!origin) return false;
   try {
     const workerHost = new URL(request.url).host;
     const originHost = new URL(origin).host;
