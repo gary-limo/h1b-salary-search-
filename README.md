@@ -1,24 +1,36 @@
 # H1B Salary Search
 
-Search H1B visa salaries. Free, fast, open source. Data source from US DoL.
+Free, open-source search engine for H-1B visa salary data from the U.S. Department of Labor LCA disclosure records (FY2025). 570,000+ records.
 
-Plain HTML/JS, DuckDB-WASM, Parquet. No backend, no API, no build step.
+**Live:** [h1b-salaries.com](https://h1b-salaries.com)
 
+## Stack
 
-### Cloudflare Pages (free)
+- **Frontend:** Plain HTML/CSS/JS (no framework, no build step)
+- **Backend:** Cloudflare Worker
+- **Database:** Cloudflare D1 (SQLite)
+- **Hosting:** Cloudflare (Worker + static assets)
+
+## Local Development
 
 ```bash
-npx wrangler pages deploy . --project-name h1b-salary-search
+# Install dependencies
+npm install
+
+# Run locally (requires Cloudflare account with D1 database)
+npm run dev
 ```
 
-## Local dev
+## Deploy
 
 ```bash
-python3 -m http.server 8080
-# Open http://localhost:8080
+npm run deploy
 ```
 
-## Data
+## Data Source
 
-- `h1b_data.parquet` — ~500k rows, ~8 MB (Employer, Job Title, Base Salary, Location, Start/End dates)
-- Source: U.S. DOL H-1B LCA disclosures
+U.S. Department of Labor — H-1B Labor Condition Application (LCA) disclosure data. Wages shown do not include benefits or bonuses.
+
+## License
+
+[MIT](LICENSE)
