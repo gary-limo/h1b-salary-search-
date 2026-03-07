@@ -246,13 +246,6 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
-      <div class="load-progress" id="loadProgress">
-        <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
-        <div class="load-status">
-          <span class="load-text" id="loadText">Initializing engine…</span>
-          <span class="load-pct" id="loadPct">0%</span>
-        </div>
-      </div>
     </form>
 
     <div class="popular">
@@ -290,174 +283,116 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
   </div>
 </main>
 
-<script type="module">
-const DUCKDB_VERSION = "1.29.0";
-const CDN = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/dist`;
-const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
-
-const PARQUET_URL = "h1b_data_02252026.parquet";
+<script>
 const PAGE_SIZE = 15;
 
 const POPULAR = [
-  { label: "Google",          employer: "Google",            job: "",  loc: "" },
-  { label: "Amazon",          employer: "Amazon",            job: "",  loc: "" },
-  { label: "Microsoft",       employer: "Microsoft",         job: "",  loc: "" },
-  { label: "Meta",            employer: "Meta",              job: "",  loc: "" },
-  { label: "Apple",           employer: "Apple",             job: "",  loc: "" },
-  { label: "Accenture",       employer: "Accenture",         job: "",  loc: "" },
-  { label: "Data Scientist",  employer: "",                  job: "Data Scientist", loc: "" },
-  { label: "Software Engineer", employer: "",                job: "Software Engineer", loc: "" },
-  { label: "San Francisco",   employer: "",                  job: "",  loc: "San Francisco" },
-  { label: "Seattle",         employer: "",                  job: "",  loc: "Seattle" },
-  { label: "New York",        employer: "",                  job: "",  loc: "New York" },
+  { label: "Google",            employer: "Google",           job: "",                  loc: "" },
+  { label: "Amazon",            employer: "Amazon",           job: "",                  loc: "" },
+  { label: "Microsoft",         employer: "Microsoft",        job: "",                  loc: "" },
+  { label: "Meta",              employer: "Meta",             job: "",                  loc: "" },
+  { label: "Apple",             employer: "Apple",            job: "",                  loc: "" },
+  { label: "Accenture",         employer: "Accenture",        job: "",                  loc: "" },
+  { label: "Data Scientist",    employer: "",                 job: "Data Scientist",     loc: "" },
+  { label: "Software Engineer", employer: "",                 job: "Software Engineer",  loc: "" },
+  { label: "San Francisco",     employer: "",                 job: "",                  loc: "San Francisco" },
+  { label: "Seattle",           employer: "",                 job: "",                  loc: "Seattle" },
+  { label: "New York",          employer: "",                 job: "",                  loc: "New York" },
 ];
-
-let db, conn;
-let currentPage = 1;
-let totalCount = 0;
-let hasSearched = false;
-let sortCol = "wf";
-let sortDir = "DESC";
 
 const SORT_COLS = [
-  { key: "e", label: "Employer" },
-  { key: "j", label: "Job Title" },
-  { key: "wf", label: "Base Salary" },
-  { key: "loc", label: "Location" },
-  { key: "bd", label: "Start" },
-  { key: "ed", label: "End" },
+  { key: "employer_name",         label: "Employer"    },
+  { key: "job_title",             label: "Job Title"   },
+  { key: "wage_rate_of_pay_from", label: "Base Salary" },
+  { key: "worksite_state",        label: "Location"    },
+  { key: "begin_date",            label: "Start"       },
+  { key: "end_date",              label: "End"         },
 ];
+
+let currentPage = 1;
+let totalCount  = 0;
+let hasSearched = false;
+let sortCol     = "wage_rate_of_pay_from";
+let sortDir     = "DESC";
 
 const $ = (id) => document.getElementById(id);
 const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
 const empDropdown = $("empDropdown"), jobDropdown = $("jobDropdown"), locDropdown = $("locDropdown");
 const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), locFieldInner = $("locFieldInner");
-
-function setProgress(pct, text) {
-  $("loadBar").style.width = `${pct}%`;
-  $("loadPct").textContent = `${Math.round(pct)}%`;
-  if (text) $("loadText").textContent = text;
-}
-
-async function initDB() {
-  $("loadProgress").classList.add("show");
-  setProgress(5, "Initializing engine\u2026");
-
-  const bundle = await duckdb.selectBundle({
-    mvp: {
-      mainModule: `${CDN}/duckdb-mvp.wasm`,
-      mainWorker: `${CDN}/duckdb-browser-mvp.worker.js`,
-    },
-    eh: {
-      mainModule: `${CDN}/duckdb-eh.wasm`,
-      mainWorker: `${CDN}/duckdb-browser-eh.worker.js`,
-    },
-  });
-  setProgress(15, "Loading DuckDB engine\u2026");
-  const worker = await duckdb.createWorker(bundle.mainWorker);
-  const logger = { log: () => {}, warn: () => {}, error: () => {}, info: () => {}, debug: () => {} };
-  db = new duckdb.AsyncDuckDB(logger, worker);
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-  conn = await db.connect();
-  setProgress(25, "Downloading data\u2026");
-
-  const res = await fetch(PARQUET_URL);
-  if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
-  const total = Number(res.headers.get("content-length")) || 0;
-  let loaded = 0;
-  const reader = res.body.getReader();
-  const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.length;
-    if (total) {
-      const dlPct = 25 + (loaded / total) * 60;
-      setProgress(dlPct, `Downloading data\u2026 ${(loaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB`);
-    } else {
-      setProgress(50, `Downloading data\u2026 ${(loaded / 1048576).toFixed(1)} MB`);
-    }
-  }
-  const buf = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
-
-  setProgress(88, "Building index\u2026");
-  await db.registerFileBuffer("h1b.parquet", buf);
-  await conn.query(`CREATE TABLE h1b AS SELECT * FROM read_parquet('h1b.parquet')`);
-  setProgress(100, "Ready!");
-}
-
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
-searchBtn.disabled = true;
-searchBtnText.textContent = "Loading database\u2026";
-const dbReady = initDB().then(() => {
-  searchBtn.disabled = false;
-  searchBtnText.textContent = "Search Salaries";
-  setTimeout(() => $("loadProgress").classList.remove("show"), 600);
-}).catch(() => {
-  searchBtnText.textContent = "Load failed";
-  setProgress(0, "Load failed");
-});
+
+// ─── API helpers ─────────────────────────────────────────────────────────────
+
+async function apiSearch(emp, job, loc) {
+  const params = new URLSearchParams({
+    employer: emp.trim(),
+    job:      job.trim(),
+    location: loc.trim(),
+    page:     currentPage,
+    sort:     sortCol,
+    dir:      sortDir,
+  });
+  const res = await fetch(`/api/search?${params}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Request failed (${res.status})`);
+  }
+  const data = await res.json();
+  totalCount = data.total;
+  return data.results;
+}
+
+async function apiSuggest(field, q) {
+  if (q.length < 2) return [];
+  const res = await fetch(`/api/suggest?field=${field}&q=${encodeURIComponent(q)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results || [];
+}
+
+// ─── Formatters ──────────────────────────────────────────────────────────────
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-function fmtUSD(v) { return (v == null || v === 0) ? "\u2014" : usd.format(v); }
-function fmtDate(v) {
-  if (!v) return "\u2014";
-  try { const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
-  catch { return String(v); }
+function fmtUSD(v) { return v == null ? "\u2014" : usd.format(v); }
+function fmtLoc(r) {
+  const parts = [r.worksite_city, r.worksite_state].filter(Boolean);
+  return parts.join(", ") || "\u2014";
 }
-function esc(s) { return s.replace(/'/g, "''"); }
-function html(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
-
-async function fetchSuggestions(col, prefix) {
-  await dbReady;
-  const p = esc(prefix.trim().toLowerCase());
-  if (!p) return [];
-  return (await conn.query(`SELECT DISTINCT ${col} AS v FROM h1b WHERE lower(${col}) LIKE '${p}%' ORDER BY v LIMIT 8`))
-    .toArray().map(r => r.v).filter(Boolean);
+function html(s) {
+  if (s == null) return "\u2014";
+  const d = document.createElement("div");
+  d.textContent = String(s);
+  return d.innerHTML;
 }
 
-async function doSearch(emp, job, loc) {
-  await dbReady;
-  const e = emp.trim(), j = job.trim(), l = loc.trim();
-  const w = [];
-  if (e) w.push(`lower(e) LIKE '%${esc(e.toLowerCase())}%'`);
-  if (j) w.push(`lower(j) LIKE '%${esc(j.toLowerCase())}%'`);
-  if (l) w.push(`lower(loc) LIKE '%${esc(l.toLowerCase())}%'`);
-  const clause = w.length ? `WHERE ${w.join(" AND ")}` : "";
-
-  totalCount = Number((await conn.query(`SELECT count(*)::INTEGER AS c FROM h1b ${clause}`)).toArray()[0].c);
-  const offset = (currentPage - 1) * PAGE_SIZE;
-  return (await conn.query(`SELECT e,j,wf,loc,bd,ed FROM h1b ${clause} ORDER BY ${sortCol} ${sortDir} NULLS LAST LIMIT ${PAGE_SIZE} OFFSET ${offset}`)).toArray();
-}
+// ─── Render ──────────────────────────────────────────────────────────────────
 
 function renderTable(records) {
   if (!records.length) return "";
+
   const rows = records.map((r, i) => `<tr style="animation-delay:${i * 25}ms">
-    <td class="emp">${html(r.e) || "\u2014"}</td>
-    <td class="job">${html(r.j) || "\u2014"}</td>
-    <td class="salary">${fmtUSD(r.wf)}</td>
-    <td class="loc">${html(r.loc) || "\u2014"}</td>
-    <td class="date">${fmtDate(r.bd)}</td>
-    <td class="date">${fmtDate(r.ed)}</td>
+    <td class="emp">${html(r.employer_name)}</td>
+    <td class="job">${html(r.job_title)}</td>
+    <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
+    <td class="loc">${html(fmtLoc(r))}</td>
+    <td class="date">${html(r.begin_date)}</td>
+    <td class="date">${html(r.end_date)}</td>
   </tr>`).join("");
 
   const cards = records.map((r, i) => `<div class="result-card" style="animation-delay:${i * 30}ms">
-    <div class="rc-emp">${html(r.e) || "\u2014"}</div>
-    <div class="rc-job">${html(r.j) || "\u2014"}</div>
+    <div class="rc-emp">${html(r.employer_name)}</div>
+    <div class="rc-job">${html(r.job_title)}</div>
     <div class="rc-grid">
-      <div><div class="rc-label">Base Salary</div><div class="rc-val money">${fmtUSD(r.wf)}</div></div>
-      <div><div class="rc-label">Location</div><div class="rc-val">${html(r.loc) || "\u2014"}</div></div>
-      <div><div class="rc-label">Start</div><div class="rc-val">${fmtDate(r.bd)}</div></div>
-      <div><div class="rc-label">End</div><div class="rc-val">${fmtDate(r.ed)}</div></div>
+      <div><div class="rc-label">Base Salary</div><div class="rc-val money">${fmtUSD(r.wage_rate_of_pay_from)}</div></div>
+      <div><div class="rc-label">Location</div><div class="rc-val">${html(fmtLoc(r))}</div></div>
+      <div><div class="rc-label">Start</div><div class="rc-val">${html(r.begin_date)}</div></div>
+      <div><div class="rc-label">End</div><div class="rc-val">${html(r.end_date)}</div></div>
     </div>
   </div>`).join("");
 
   const ths = SORT_COLS.map(c => {
     const active = sortCol === c.key;
-    const arrow = active ? (sortDir === "ASC" ? "\u25B2" : "\u25BC") : "\u25B2";
+    const arrow  = active ? (sortDir === "ASC" ? "\u25B2" : "\u25BC") : "\u25B2";
     return `<th class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
   }).join("");
 
@@ -468,19 +403,23 @@ function renderTable(records) {
 }
 
 function renderSkeleton() {
-  const r = Array.from({length: 5}, () =>
-    `<tr>${[1,1,1,1,1,1].map(() => `<td><div class="skeleton" style="height:14px;width:${60 + Math.random() * 60}px"></div></td>`).join("")}</tr>`
+  const colCount = SORT_COLS.length;
+  const rows = Array.from({ length: 6 }, () =>
+    `<tr>${Array(colCount).fill(0).map(() =>
+      `<td><div class="skeleton" style="height:14px;width:${50 + Math.random() * 80}px"></div></td>`
+    ).join("")}</tr>`
   ).join("");
   const ths = SORT_COLS.map(c => `<th>${c.label}</th>`).join("");
   return `<div class="tbl-wrap"><div class="tbl-scroll"><table>
     <thead><tr>${ths}</tr></thead>
-    <tbody>${r}</tbody></table></div></div>`;
+    <tbody>${rows}</tbody></table></div></div>`;
 }
 
 function renderPager() {
   if (totalCount <= PAGE_SIZE) { $("pagerContainer").classList.add("hidden"); return; }
   const tp = Math.ceil(totalCount / PAGE_SIZE);
-  const s = (currentPage - 1) * PAGE_SIZE + 1, e = Math.min(currentPage * PAGE_SIZE, totalCount);
+  const s  = (currentPage - 1) * PAGE_SIZE + 1;
+  const e  = Math.min(currentPage * PAGE_SIZE, totalCount);
   $("pagerContainer").classList.remove("hidden");
   $("pagerContainer").innerHTML = `
     <span class="pager-info">${s}\u2013${e} of ${totalCount.toLocaleString()}</span>
@@ -501,7 +440,7 @@ function bindSortHeaders() {
         sortDir = sortDir === "ASC" ? "DESC" : "ASC";
       } else {
         sortCol = col;
-        sortDir = (col === "wf") ? "DESC" : "ASC";
+        sortDir = col === "wage_rate_of_pay_from" ? "DESC" : "ASC";
       }
       currentPage = 1;
       runPage();
@@ -509,80 +448,56 @@ function bindSortHeaders() {
   });
 }
 
+// ─── Search flow ─────────────────────────────────────────────────────────────
+
 async function runPage() {
-  const r = await doSearch(empInput.value, jobInput.value, locInput.value);
-  $("tableContainer").innerHTML = renderTable(r);
-  $("tableContainer").classList.remove("hidden");
-  renderPager();
-  bindSortHeaders();
-}
-
-function showResults(records) {
-  $("resultsWrap").classList.add("show");
-  $("errorBox").classList.add("hidden");
-  $("noResults").classList.add("hidden");
-  $("skeletonTable").innerHTML = "";
-  $("tableContainer").classList.add("hidden");
-  $("pagerContainer").classList.add("hidden");
-  $("resultsBadge").textContent = `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
-  if (totalCount === 0) { $("noResults").classList.remove("hidden"); return; }
-  $("tableContainer").innerHTML = renderTable(records);
-  $("tableContainer").classList.remove("hidden");
-  renderPager();
-  bindSortHeaders();
-}
-
-function wireField(input, dropdown, fieldInner, col) {
-  let t = null;
-  input.addEventListener("focus", () => fieldInner.classList.add("focused"));
-  input.addEventListener("blur", () => { fieldInner.classList.remove("focused"); setTimeout(() => dropdown.classList.remove("open"), 180); });
-  input.addEventListener("input", () => {
-    clearTimeout(t);
-    const v = input.value.trim();
-    if (v.length < 2 || hasSearched) { dropdown.classList.remove("open"); return; }
-    dropdown.innerHTML = `<div class="dropdown-loading"><svg class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Finding\u2026</div>`;
-    dropdown.classList.add("open");
-    t = setTimeout(async () => {
-      try {
-        const items = await fetchSuggestions(col, v);
-        if (!items.length) { dropdown.classList.remove("open"); return; }
-        dropdown.innerHTML = items.map(s => `<div class="dropdown-item">${html(s)}</div>`).join("");
-        dropdown.classList.add("open");
-        dropdown.querySelectorAll(".dropdown-item").forEach(el =>
-          el.addEventListener("mousedown", ev => { ev.preventDefault(); input.value = el.textContent; dropdown.classList.remove("open"); }));
-      } catch { dropdown.classList.remove("open"); }
-    }, 120);
-  });
-}
-wireField(empInput, empDropdown, empFieldInner, "e");
-wireField(jobInput, jobDropdown, jobFieldInner, "j");
-wireField(locInput, locDropdown, locFieldInner, "loc");
-
-async function executeSearch() {
-  [empDropdown, jobDropdown, locDropdown].forEach(d => d.classList.remove("open"));
-  hasSearched = true;
-  searchBtn.disabled = true;
-  searchBtnText.textContent = "Searching\u2026";
-  currentPage = 1; totalCount = 0; sortCol = "wf"; sortDir = "DESC";
-  $("resultsWrap").classList.add("show");
-  $("errorBox").classList.add("hidden");
-  $("noResults").classList.add("hidden");
-  $("tableContainer").classList.add("hidden");
-  $("pagerContainer").classList.add("hidden");
-  $("skeletonTable").innerHTML = renderSkeleton();
-  $("resultsBadge").textContent = "";
   try {
-    await dbReady;
-    showResults(await doSearch(empInput.value, jobInput.value, locInput.value));
-    $("resultsWrap").scrollIntoView({ behavior: "smooth", block: "start" });
+    const records = await apiSearch(empInput.value, jobInput.value, locInput.value);
+    $("tableContainer").innerHTML = renderTable(records);
+    $("tableContainer").classList.remove("hidden");
+    $("resultsBadge").textContent = `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
+    if (totalCount === 0) {
+      $("noResults").classList.remove("hidden");
+      $("tableContainer").classList.add("hidden");
+    } else {
+      $("noResults").classList.add("hidden");
+    }
+    renderPager();
+    bindSortHeaders();
   } catch (err) {
     $("errorMsg").textContent = err.message || "Search failed.";
     $("errorBox").classList.remove("hidden");
     $("skeletonTable").innerHTML = "";
     $("resultsBadge").textContent = "0 records";
+  }
+}
+
+async function executeSearch() {
+  [empDropdown, jobDropdown, locDropdown].forEach(d => d.classList.remove("open"));
+  hasSearched  = true;
+  currentPage  = 1;
+  totalCount   = 0;
+  sortCol      = "wage_rate_of_pay_from";
+  sortDir      = "DESC";
+
+  searchBtn.disabled      = true;
+  searchBtnText.textContent = "Searching\u2026";
+
+  $("resultsWrap").classList.add("show");
+  $("errorBox").classList.add("hidden");
+  $("noResults").classList.add("hidden");
+  $("tableContainer").classList.add("hidden");
+  $("pagerContainer").classList.add("hidden");
+  $("skeletonTable").innerHTML  = renderSkeleton();
+  $("resultsBadge").textContent = "";
+
+  try {
+    await runPage();
+    $("resultsWrap").scrollIntoView({ behavior: "smooth", block: "start" });
   } finally {
-    searchBtn.disabled = false;
+    searchBtn.disabled        = false;
     searchBtnText.textContent = "Search Salaries";
+    $("skeletonTable").innerHTML = "";
   }
 }
 
@@ -591,8 +506,51 @@ $("searchForm").addEventListener("submit", async ev => {
   await executeSearch();
 });
 
+// ─── Autocomplete ─────────────────────────────────────────────────────────────
+
+function wireField(input, dropdown, fieldInner, field) {
+  let timer = null;
+  input.addEventListener("focus", () => fieldInner.classList.add("focused"));
+  input.addEventListener("blur",  () => {
+    fieldInner.classList.remove("focused");
+    setTimeout(() => dropdown.classList.remove("open"), 180);
+  });
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const v = input.value.trim();
+    if (v.length < 2) { dropdown.classList.remove("open"); return; }
+    dropdown.innerHTML = `<div class="dropdown-loading">
+      <svg class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>Finding\u2026</div>`;
+    dropdown.classList.add("open");
+    timer = setTimeout(async () => {
+      const items = await apiSuggest(field, v);
+      if (!items.length) { dropdown.classList.remove("open"); return; }
+      dropdown.innerHTML = items.map(s => `<div class="dropdown-item">${html(s)}</div>`).join("");
+      dropdown.classList.add("open");
+      dropdown.querySelectorAll(".dropdown-item").forEach(el =>
+        el.addEventListener("mousedown", ev => {
+          ev.preventDefault();
+          input.value = el.textContent;
+          dropdown.classList.remove("open");
+        })
+      );
+    }, 150);
+  });
+}
+
+wireField(empInput, empDropdown, empFieldInner, "employer");
+wireField(jobInput, jobDropdown, jobFieldInner, "job");
+wireField(locInput, locDropdown, locFieldInner, "location");
+
+// ─── Clear button ─────────────────────────────────────────────────────────────
+
 function updateClearBtn() {
-  $("clearBtn").classList.toggle("show", !!(empInput.value.trim() || jobInput.value.trim() || locInput.value.trim()));
+  $("clearBtn").classList.toggle(
+    "show",
+    !!(empInput.value.trim() || jobInput.value.trim() || locInput.value.trim())
+  );
 }
 [empInput, jobInput, locInput].forEach(el => el.addEventListener("input", updateClearBtn));
 $("clearBtn").addEventListener("click", () => {
@@ -602,11 +560,13 @@ $("clearBtn").addEventListener("click", () => {
   updateClearBtn();
 });
 
+// ─── Popular buttons ──────────────────────────────────────────────────────────
+
 const popularContainer = document.querySelector(".popular");
 POPULAR.forEach(item => {
   const btn = document.createElement("button");
   btn.className = "popular-btn";
-  btn.type = "button";
+  btn.type      = "button";
   btn.textContent = item.label;
   btn.addEventListener("click", () => {
     empInput.value = item.employer;
