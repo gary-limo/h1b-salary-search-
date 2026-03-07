@@ -9,11 +9,13 @@
  *   GET /api/suggest  – autocomplete suggestions
  *
  * Cross-origin policy: API requests are only accepted when the Origin
- * header matches this Worker's own hostname (same-site enforcement).
- * Requests with no Origin header (e.g. curl, server-to-server) are allowed.
+ * or Referer header matches this Worker's own hostname (same-site enforcement).
+ * Requests with no matching header are rejected (403).
  */
 
 const PAGE_SIZE = 15;
+const MAX_INPUT_LENGTH = 200;
+const MAX_PAGE = 10000;
 
 // Columns that can be used in ORDER BY (whitelist to prevent SQL injection)
 const SORTABLE = new Set([
@@ -45,18 +47,17 @@ export default {
       return new Response("Not Found", { status: 404 });
     }
 
-    // Handle CORS preflight for API routes
-    if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
-      return new Response(null, {
-        status: 204,
-        headers: buildCorsHeaders(request),
-      });
-    }
-
-    // Delegate API requests to handlers
+    // Delegate API requests to handlers (including CORS preflight)
     if (url.pathname.startsWith("/api/")) {
       if (!isSameOrigin(request)) {
         return jsonResponse({ error: "Forbidden" }, 403, {});
+      }
+
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: buildCorsHeaders(request),
+        });
       }
       if (request.method !== "GET") {
         return jsonResponse({ error: "Method not allowed" }, 405, buildCorsHeaders(request));
@@ -85,10 +86,15 @@ export default {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function handleSearch(params, db, cors) {
-  const employer = (params.get("employer") || "").trim();
-  const job = (params.get("job") || "").trim();
-  const location = (params.get("location") || "").trim();
-  const page = Math.max(1, parseInt(params.get("page") || "1", 10));
+  const employer = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const job = (params.get("job") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const location = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
+
+  if (!employer && !job && !location) {
+    return jsonResponse({ error: "Please provide at least one search term." }, 400, cors);
+  }
+
+  const page = Math.min(MAX_PAGE, Math.max(1, parseInt(params.get("page") || "1", 10) || 1));
   const sortParam = params.get("sort") || "wage_rate_of_pay_from";
   const dirParam = (params.get("dir") || "DESC").toUpperCase();
 
@@ -152,7 +158,7 @@ async function handleSearch(params, db, cors) {
 
 async function handleRecord(params, db, cors) {
   const id = parseInt(params.get("id") || "0", 10);
-  if (!id || id < 1) {
+  if (!id || id < 1 || !Number.isFinite(id)) {
     return jsonResponse({ error: "Invalid record ID." }, 400, cors);
   }
   try {
@@ -182,7 +188,7 @@ async function handleRecord(params, db, cors) {
 
 async function handleSuggest(params, db, cors) {
   const field = params.get("field") || "";
-  const q = (params.get("q") || "").trim();
+  const q = (params.get("q") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const col = SUGGEST_FIELDS[field];
 
   if (!col || q.length < 2) {
