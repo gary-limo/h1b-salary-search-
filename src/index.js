@@ -222,20 +222,33 @@ function jsonResponse(body, status, extraHeaders) {
 }
 
 /**
- * Returns true only when the Origin header is present and matches the Worker's host.
- * Rejects: curl, Postman, scripts (no Origin), other sites (wrong Origin).
- * Browsers always send Origin for fetch/XHR from a page.
+ * Allow requests from our own site. Normalize www/non-www so both work.
+ * Reject: curl, Postman, scripts (no Origin/Referer), other sites.
  */
+function normHost(host) {
+  if (!host) return "";
+  return host.replace(/^www\./, "");
+}
+
 function isSameOrigin(request) {
   const origin = request.headers.get("Origin");
-  if (!origin) return false;
-  try {
-    const workerHost = new URL(request.url).host;
-    const originHost = new URL(origin).host;
-    return originHost === workerHost;
-  } catch {
-    return false;
+  const referer = request.headers.get("Referer");
+
+  const workerHost = normHost(new URL(request.url).host);
+
+  if (origin) {
+    try {
+      if (normHost(new URL(origin).host) === workerHost) return true;
+    } catch {}
   }
+
+  if (referer) {
+    try {
+      if (normHost(new URL(referer).host) === workerHost) return true;
+    } catch {}
+  }
+
+  return false;
 }
 
 function buildCorsHeaders(request) {
