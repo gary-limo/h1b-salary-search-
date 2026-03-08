@@ -115,15 +115,15 @@ async function handleSearch(params, db, cors) {
   const bindings = [];
 
   if (employer) {
-    where.push("LOWER(employer_name) LIKE ?");
+    where.push("f.employer_name LIKE ?");
     bindings.push(`%${employer.toLowerCase()}%`);
   }
   if (job) {
-    where.push("LOWER(job_title) LIKE ?");
+    where.push("f.job_title LIKE ?");
     bindings.push(`%${job.toLowerCase()}%`);
   }
   if (location) {
-    where.push("(LOWER(worksite_city) LIKE ? OR LOWER(worksite_state) LIKE ?)");
+    where.push("(f.worksite_city LIKE ? OR f.worksite_state LIKE ?)");
     bindings.push(`%${location.toLowerCase()}%`, `%${location.toLowerCase()}%`);
   }
 
@@ -132,17 +132,24 @@ async function handleSearch(params, db, cors) {
   try {
     const [countRow, rows] = await Promise.all([
       db
-        .prepare(`SELECT COUNT(*) AS total FROM h1b_wages ${whereClause}`)
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM h1b_wages_fts f
+           JOIN h1b_wages w ON w.id = f.rowid
+           ${whereClause}`
+        )
         .bind(...bindings)
         .first(),
       db
         .prepare(
-          `SELECT id, employer_name, job_title,
-                  wage_rate_of_pay_from,
-                  worksite_city, worksite_state,
-                  begin_date, end_date
-           FROM h1b_wages ${whereClause}
-           ORDER BY ${sort} ${dir} NULLS LAST
+          `SELECT w.id, w.employer_name, w.job_title,
+                  w.wage_rate_of_pay_from,
+                  w.worksite_city, w.worksite_state,
+                  w.begin_date, w.end_date
+           FROM h1b_wages_fts f
+           JOIN h1b_wages w ON w.id = f.rowid
+           ${whereClause}
+           ORDER BY w.${sort} ${dir} NULLS LAST
            LIMIT ${PAGE_SIZE} OFFSET ${offset}`
         )
         .bind(...bindings)
