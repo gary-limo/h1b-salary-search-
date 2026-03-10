@@ -315,7 +315,7 @@ const POPULAR = [
   { label: "Amazon",            employer: "Amazon",           job: "",                  loc: "" },
   { label: "Microsoft",         employer: "Microsoft",        job: "",                  loc: "" },
   { label: "Meta",              employer: "Meta",             job: "",                  loc: "" },
-  { label: "Apple",             employer: "Apple",            job: "",                  loc: "" },
+  { label: "Apple",             employer: "Apple Inc",            job: "",                  loc: "" },
   { label: "Accenture",         employer: "Accenture",        job: "",                  loc: "" },
   { label: "Data Scientist",    employer: "",                 job: "Data Scientist",     loc: "" },
   { label: "Software Engineer", employer: "",                 job: "Software Engineer",  loc: "" },
@@ -344,6 +344,7 @@ let cachedResults  = [];
 let cacheKey       = "";
 let filterEmp      = "";
 let filterJob      = "";
+let filterLoc      = "";
 let openFilterCol  = "";
 let filterDebounce;
 
@@ -359,12 +360,14 @@ function getCacheKey(emp, job, loc) {
 }
 
 function applyResultFilters(records) {
-  const emp = filterEmp.trim().toLowerCase();
-  const job = filterJob.trim().toLowerCase();
-  if (!emp && !job) return records;
+  const emp  = filterEmp.trim().toLowerCase();
+  const job  = filterJob.trim().toLowerCase();
+  const loc  = filterLoc.trim().toLowerCase();
+  if (!emp && !job && !loc) return records;
   return records.filter((r) => {
     if (emp && !(r.employer_name || "").toLowerCase().includes(emp)) return false;
     if (job && !(r.job_title || "").toLowerCase().includes(job)) return false;
+    if (loc && !fmtLoc(r).toLowerCase().includes(loc)) return false;
     return true;
   });
 }
@@ -443,13 +446,14 @@ function renderTable(records) {
   </div>`).join("");
 
   const funnelSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
+  const FILTERABLE = ["employer_name", "job_title", "worksite_state"];
   const ths = SORT_COLS.map(c => {
     const active = sortCol === c.key;
     const arrow  = active ? (sortDir === "ASC" ? "\u25B2" : "\u25BC") : "\u25B2";
-    if (c.key !== "employer_name" && c.key !== "job_title") {
+    if (!FILTERABLE.includes(c.key)) {
       return `<th class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
     }
-    const fval    = c.key === "employer_name" ? filterEmp : filterJob;
+    const fval    = c.key === "employer_name" ? filterEmp : c.key === "job_title" ? filterJob : filterLoc;
     const fActive = fval.trim() !== "";
     const safeVal = fval.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
     return `<th class="${active ? "sorted" : ""} th-filterable" data-col="${c.key}">` +
@@ -546,6 +550,7 @@ function bindFilterIcons() {
       const col = input.dataset.fcol;
       if (col === "employer_name") filterEmp = input.value;
       else if (col === "job_title") filterJob = input.value;
+      else if (col === "worksite_state") filterLoc = input.value;
       openFilterCol = col;
       clearTimeout(filterDebounce);
       filterDebounce = setTimeout(() => { currentPage = 1; runPage(); }, 200);
@@ -565,6 +570,7 @@ function bindFilterIcons() {
       const col = btn.dataset.fcol;
       if (col === "employer_name") filterEmp = "";
       else if (col === "job_title") filterJob = "";
+      else if (col === "worksite_state") filterLoc = "";
       openFilterCol = "";
       currentPage = 1;
       runPage();
@@ -630,12 +636,12 @@ async function runPage() {
 
     $("tableContainer").innerHTML = renderTable(records);
     $("tableContainer").classList.remove("hidden");
-    $("resultsBadge").textContent = filteredCount === totalCount && !filterEmp && !filterJob
+    $("resultsBadge").textContent = filteredCount === totalCount && !filterEmp && !filterJob && !filterLoc
       ? `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`
       : `${filteredCount.toLocaleString()} of ${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
     if (filteredCount === 0) {
       $("noResults").classList.remove("hidden");
-      $("noResults").textContent = filterEmp || filterJob ? "No matches for filters. Try different terms." : "No records found. Try a different search.";
+      $("noResults").textContent = filterEmp || filterJob || filterLoc ? "No matches for filters. Try different terms." : "No records found. Try a different search.";
       $("tableContainer").classList.add("hidden");
     } else {
       $("noResults").classList.add("hidden");
@@ -661,6 +667,7 @@ async function executeSearch() {
   sortDir          = "DESC";
   filterEmp        = "";
   filterJob        = "";
+  filterLoc        = "";
   openFilterCol    = "";
 
   searchBtn.disabled      = true;
