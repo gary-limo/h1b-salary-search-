@@ -207,6 +207,19 @@ td.empty-cell{color:#C0C7CF;font-style:italic;font-size:12px}
       <div class="chart-container"><canvas id="lineChart"></canvas></div>
     </div>
 
+    <div class="section-hdr">
+      <div class="section-bar"></div>
+      <div class="section-title">Avg salaies by level</div>
+    </div>
+    <div class="tbl-wrap">
+      <div class="tbl-scroll">
+        <table id="detailTable">
+          <thead><tr id="detailThead"></tr></thead>
+          <tbody id="detailTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <div class="disclaimer">
@@ -229,7 +242,8 @@ var CAREER_LEVELS = [
   "L4 - Expert",
   "L5 - Manager",
   "L6 - Senior Manager",
-  "L7 - Executive"
+  "L7 - Executive",
+  "Non-Tech"
 ];
 
 var COMPANY_COLORS = ["#C41E3A", "#B8A062", "#1B2A4A", "#2D8F4E", "#7B4FC4"];
@@ -775,6 +789,32 @@ function renderLineChart(pivotData, employers) {
   });
 }
 
+function renderDataTable(pivotData, employers) {
+  var thead = $("detailThead");
+  var tbody = $("detailTbody");
+
+  var thHtml = '<th>Career Level</th>';
+  for (var e = 0; e < employers.length; e++) {
+    thHtml += '<th>' + escHtml(employers[e]) + '</th>';
+  }
+  thead.innerHTML = thHtml;
+
+  var trHtml = "";
+  for (var l = 0; l < CAREER_LEVELS.length; l++) {
+    var level = CAREER_LEVELS[l];
+    trHtml += '<tr><td class="level-cell">' + escHtml(level) + '</td>';
+    for (var e = 0; e < employers.length; e++) {
+      var cell = pivotData[level] ? pivotData[level][employers[e]] : null;
+      var val = cell && cell.wage != null ? cell.wage : null;
+      var cls = val != null ? "" : " empty-cell";
+      var content = val != null ? '<span class="wage-val">' + escHtml(fmtUSD(val)) + '</span>' : "\u2014";
+      trHtml += '<td class="' + cls + '">' + content + '</td>';
+    }
+    trHtml += '</tr>';
+  }
+  tbody.innerHTML = trHtml;
+}
+
 function renderDashboard(results) {
   var built = buildPivot(results);
   var employers = built.employers;
@@ -789,6 +829,7 @@ function renderDashboard(results) {
   renderKPIs(kpis);
   renderBarChart(pivotData, employers);
   renderLineChart(pivotData, employers);
+  renderDataTable(pivotData, employers);
   $("dashboard").classList.add("show");
   $("dashboard").scrollIntoView({ behavior: "smooth", block: "start" });
 }
