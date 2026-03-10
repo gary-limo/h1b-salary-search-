@@ -14,7 +14,7 @@
  */
 
 const DEFAULT_PAGE_SIZE = 100;
-const ALLOWED_PAGE_SIZES = new Set([10, 25, 50, 100]);
+const MAX_FETCH_SIZE    = 10000;
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
 
@@ -106,7 +106,7 @@ async function handleSearch(params, db, cors) {
 
   const page = Math.min(MAX_PAGE, Math.max(1, parseInt(params.get("page") || "1", 10) || 1));
   const requestedSize = parseInt(params.get("pageSize") || String(DEFAULT_PAGE_SIZE), 10);
-  const pageSize = ALLOWED_PAGE_SIZES.has(requestedSize) ? requestedSize : DEFAULT_PAGE_SIZE;
+  const pageSize = Math.min(MAX_FETCH_SIZE, Math.max(1, Number.isFinite(requestedSize) ? requestedSize : DEFAULT_PAGE_SIZE));
   const sortParam = params.get("sort") || "wage_rate_of_pay_from";
   const dirParam = (params.get("dir") || "DESC").toUpperCase();
 

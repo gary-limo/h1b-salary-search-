@@ -306,9 +306,9 @@ th.th-filterable{position:relative}
 </main>
 
 <script>
-const DEFAULT_PAGE_SIZE = 15;   // records shown per page on first load
+const DEFAULT_PAGE_SIZE = 15;
 const PAGE_SIZE_OPTIONS = [15, 25, 50, 75];
-const FETCH_BATCH_SIZE = 100;   // records fetched from API per request
+const MAX_FETCH_SIZE    = 10000;
 
 const POPULAR = [
   { label: "Google",            employer: "Google",           job: "",                  loc: "" },
@@ -372,36 +372,20 @@ function applyResultFilters(records) {
   });
 }
 
-async function apiFetchBatch(emp, job, loc, apiPage, apiPageSize) {
+async function ensureCacheLoaded(emp, job, loc) {
+  if (cachedResults.length > 0) return;
   const params = new URLSearchParams({
-    employer:  emp.trim(),
-    job:       job.trim(),
-    location:  loc.trim(),
-    page:      apiPage,
-    pageSize:  apiPageSize,
-    sort:      sortCol,
-    dir:       sortDir,
+    employer: emp.trim(), job: job.trim(), location: loc.trim(),
+    page: 1, pageSize: MAX_FETCH_SIZE, sort: sortCol, dir: sortDir,
   });
   const res = await fetch(`/api/search?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Request failed (${res.status})`);
   }
-  return res.json();
-}
-
-async function ensureCacheHasPage(emp, job, loc) {
-  const needed = currentPage * currentPageSize;
-  if (cachedResults.length >= needed) return;
-  if (totalCount > 0 && cachedResults.length >= totalCount) return;
-
-  const apiPage = Math.floor(cachedResults.length / FETCH_BATCH_SIZE) + 1;
-  const data = await apiFetchBatch(emp, job, loc, apiPage, FETCH_BATCH_SIZE);
-  totalCount = data.total;
-  cachedResults.push(...(data.results || []));
-  if (data.results?.length > 0 && cachedResults.length < needed && cachedResults.length < totalCount) {
-    await ensureCacheHasPage(emp, job, loc);
-  }
+  const data = await res.json();
+  totalCount    = data.total ?? 0;
+  cachedResults = data.results || [];
 }
 
 
@@ -423,9 +407,7 @@ function html(s) {
 // ─── Render ──────────────────────────────────────────────────────────────────
 
 function renderTable(records) {
-  if (!records.length) return "";
-
-  const rows = records.map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
+  const rows = (records || []).map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
     <td class="emp"><a href="/record?id=${html(r.id)}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a></td>
     <td class="job">${html(r.job_title)}</td>
     <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
@@ -434,7 +416,7 @@ function renderTable(records) {
     <td class="date">${html(r.end_date)}</td>
   </tr>`).join("");
 
-  const cards = records.map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
+  const cards = (records || []).map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
     <a href="/record?id=${html(r.id)}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a>
     <div class="rc-job">${html(r.job_title)}</div>
     <div class="rc-grid">
@@ -628,7 +610,7 @@ async function runPage() {
     cachedResults = [];
   }
   try {
-    await ensureCacheHasPage(emp, job, loc);
+    await ensureCacheLoaded(emp, job, loc);
     const filtered = applyResultFilters(cachedResults);
     const filteredCount = filtered.length;
     const start = (currentPage - 1) * currentPageSize;
@@ -641,8 +623,8 @@ async function runPage() {
       : `${filteredCount.toLocaleString()} of ${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
     if (filteredCount === 0) {
       $("noResults").classList.remove("hidden");
-      $("noResults").textContent = filterEmp || filterJob || filterLoc ? "No matches for filters. Try different terms." : "No records found. Try a different search.";
-      $("tableContainer").classList.add("hidden");
+      $("noResults").textContent = filterEmp || filterJob || filterLoc ? "No matches for filters. Clear or change filter terms above." : "No records found. Try a different search.";
+      // Keep table visible (with empty body) so user can still use filter icons to fix their search
     } else {
       $("noResults").classList.add("hidden");
     }
