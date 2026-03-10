@@ -42,6 +42,11 @@ const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const staticRouteMap = {
+      "/": "/index.html",
+      "/compare": "/compare.html",
+      "/record": "/record.html",
+    };
 
     // Block server-side files from being served as static assets
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p))) {
@@ -84,11 +89,21 @@ export default {
       if (url.pathname === "/api/record") {
         return handleRecord(url.searchParams, env.DB, cors);
       }
+      if (url.pathname === "/api/compare") {
+        return handleCompare(url.searchParams, env.DB, cors);
+      }
 
       return jsonResponse({ error: "Not found" }, 404, cors);
     }
 
-    // Serve all other paths as static assets (index.html, favicon, etc.)
+    // Serve all other paths as static assets (index.html, compare.html, etc.)
+    if (staticRouteMap[url.pathname]) {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = staticRouteMap[url.pathname];
+      return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+    }
+
+    // Fallback to direct static asset lookup
     return env.ASSETS.fetch(request);
   },
 };
@@ -220,7 +235,7 @@ async function handleSuggest(params, db, cors) {
       .prepare(
         `SELECT DISTINCT ${col} AS value
          FROM h1b_wages
-         WHERE LOWER(${col}) LIKE ?
+         WHERE ${col} LIKE ?
          ORDER BY ${col}
          LIMIT 8`
       )
@@ -235,6 +250,42 @@ async function handleSuggest(params, db, cors) {
   } catch (err) {
     console.error("Suggest error:", err);
     return jsonResponse({ error: "Suggestion lookup failed." }, 500, cors);
+  }
+}
+
+async function handleCompare(params, db, cors) {
+  const raw = (params.get("employers") || "").trim();
+  if (!raw) {
+    return jsonResponse({ error: "Provide at least one employer." }, 400, cors);
+  }
+
+  const employers = raw.split("||").map(e => e.trim()).filter(Boolean).slice(0, 5);
+  if (employers.length === 0) {
+    return jsonResponse({ error: "Provide at least one employer." }, 400, cors);
+  }
+
+  const placeholders = employers.map(() => "?").join(",");
+
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT employer_name, ROUND(avg_wage, 0) AS avg_wage,
+                std_career_level
+         FROM h1b_salary_summary
+         WHERE employer_name IN (${placeholders})
+         ORDER BY employer_name, std_career_level`
+      )
+      .bind(...employers)
+      .all();
+
+    return jsonResponse({ results: results || [] }, 200, cors);
+  } catch (err) {
+    console.error("Compare error:", err);
+    const msg = String(err && err.message ? err.message : err);
+    if (msg.includes("no such table: h1b_salary_summary")) {
+      return jsonResponse({ error: "Compare data is not initialized. Run migration 0002 to create h1b_salary_summary." }, 500, cors);
+    }
+    return jsonResponse({ error: "Comparison failed. Please try again." }, 500, cors);
   }
 }
 

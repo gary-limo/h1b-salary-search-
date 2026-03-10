@@ -22,24 +22,28 @@ fi
 echo "Seeding local D1 (this may take a few minutes)..."
 echo ""
 
-echo "Step 1/5: Creating h1b_wages schema..."
+echo "Step 1/6: Creating h1b_wages schema..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001_create_h1b_wages.sql
 
 echo ""
-echo "Step 2/5: Loading h1b_wages data..."
+echo "Step 2/6: Loading h1b_wages data..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./h1b_wages_export.sql
 
 echo ""
-echo "Step 3/5: Creating FTS index..."
+echo "Step 3/6: Running data quality checks..."
+npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c_data_quality.sql
+
+echo ""
+echo "Step 4/6: Creating FTS index..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001b_create_fts.sql
 
 echo ""
-echo "Step 4/5: Creating h1b_salary_compare table..."
+echo "Step 5/6: Creating h1b_salary_compare table..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0002_create_salary_compare.sql
 
 echo ""
-echo "Step 5/5: Verifying..."
-npx wrangler d1 execute "$DB_NAME" --local --command "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages UNION ALL SELECT 'h1b_salary_compare', COUNT(*) FROM h1b_salary_compare;"
+echo "Step 6/6: Verifying..."
+npx wrangler d1 execute "$DB_NAME" --local --command "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages UNION ALL SELECT 'h1b_salary_compare', COUNT(*) FROM h1b_salary_compare UNION ALL SELECT 'h1b_salary_summary', COUNT(*) FROM h1b_salary_summary;"
 
 echo ""
 echo "Done. Local D1 is ready. Run: npm run dev"

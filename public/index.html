@@ -72,6 +72,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .nav-tagline{color:rgba(255,255,255,.6);font-size:12px;font-weight:400;letter-spacing:.2px}
 .nav-link{color:#B8A062;text-decoration:none;font-weight:500}
 .nav-link:hover{color:#fff;text-decoration:underline}
+.nav-sep{color:rgba(255,255,255,.2);font-size:12px}
 
 .hero{position:relative;background:linear-gradient(135deg,#1B2A4A 0%,#243560 50%,#1B2A4A 100%);padding:40px 24px 56px;overflow:visible}
 .hero h1{font-size:clamp(28px,5vw,44px);font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.1;margin-bottom:14px;text-align:center}
@@ -186,6 +187,11 @@ th.th-filterable{position:relative}
 .spinner{animation:spin 1s linear infinite}
 .hidden{display:none!important}
 
+.site-footer{text-align:center;padding:24px 16px 32px;font-size:12px;color:#8896A6}
+.site-footer a{color:#B8A062;text-decoration:none;font-weight:500}
+.site-footer a:hover{text-decoration:underline;color:#1B2A4A}
+.footer-sep{margin:0 6px;color:#C0C7CF}
+
 /* ─── Mobile ────────────────────────────────────────────────────────────── */
 @media (max-width:640px){
   .hero{padding:28px 16px 40px}
@@ -228,12 +234,14 @@ th.th-filterable{position:relative}
 <nav>
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
-  <span class="nav-tagline">—  <a href="https://github.com/gary-limo/h1b-salary-search-" target="_blank" rel="noopener noreferrer" class="nav-link">open source</a>  project (Data from FY2025)</span>
+  <span class="nav-tagline">
+    <a href="/compare" class="nav-link">Compare Wages</a>
+  </span>
 </nav>
 
 <section class="hero">
   <div style="max-width:720px;margin:0 auto;text-align:center">
-    <h1>H1B Salary <span class="accent">Explorer</span></h1>
+    <h1>Salary <span class="accent">Explorer</span></h1>
 
     <form id="searchForm" autocomplete="off" class="search-box">
       <div class="search-grid">
@@ -307,6 +315,12 @@ th.th-filterable{position:relative}
     <span><strong>Data source:</strong> U.S. Department of Labor H-1B LCA. Wages do not include benefits or bonuses. For reference only.</span>
   </div>
 </main>
+
+<footer class="site-footer">
+  <a href="https://github.com/gary-limo/h1b-salary-search-" target="_blank" rel="noopener noreferrer">Open Source</a>
+  <span class="footer-sep">&middot;</span>
+  <span>Data from FY2025</span>
+</footer>
 
 <script>
 const DEFAULT_PAGE_SIZE = 15;
