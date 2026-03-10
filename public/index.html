@@ -164,13 +164,16 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 .pager-btn:disabled{background:#F5F5F4;color:#C0C7CF;cursor:not-allowed;opacity:.7}
 .pager-page{padding:0 12px;font-size:13px;color:#5A6478;font-weight:600}
 
-.filter-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;background:#fff;border:1px solid #E2DDD6;border-radius:10px 10px 0 0;border-bottom:none;margin-top:10px;box-shadow:0 1px 2px rgba(27,42,74,.03)}
-.filter-bar .filter-label{font-size:12px;color:#8896A6;font-weight:600}
-.filter-bar input{width:140px;padding:6px 10px;border:1px solid #E2DDD6;border-radius:6px;font-size:13px;outline:none;transition:border .15s}
-.filter-bar input:focus{border-color:#C4A35A;box-shadow:0 0 0 2px rgba(196,163,90,.15)}
-.filter-bar input::placeholder{color:#B8BEC8}
-.filter-bar .filter-clear{padding:6px 12px;font-size:12px;color:#8896A6;background:transparent;border:none;cursor:pointer;border-radius:6px;transition:all .1s}
-.filter-bar .filter-clear:hover{color:#C41E3A;background:rgba(196,30,58,.06)}
+th.th-filterable{position:relative}
+.th-inner{display:inline-flex;align-items:center;gap:5px;width:100%}
+.th-filter-btn{background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;padding:2px 3px;border-radius:3px;display:inline-flex;align-items:center;flex-shrink:0;line-height:1;transition:color .12s}
+.th-filter-btn:hover,.th-filter-btn.active{color:#C4A35A}
+.th-filter-pop{position:absolute;top:100%;left:0;z-index:400;background:#fff;border:1px solid #E2DDD6;border-radius:8px;box-shadow:0 6px 20px rgba(27,42,74,.14);padding:10px;min-width:210px;display:none}
+.th-filter-pop.open{display:block}
+.th-filter-pop input{width:100%;padding:7px 10px;border:1px solid #E2DDD6;border-radius:6px;font-size:13px;color:#1B2A4A;outline:none;font-family:inherit}
+.th-filter-pop input:focus{border-color:#C4A35A;box-shadow:0 0 0 2px rgba(196,163,90,.15)}
+.th-filter-pop .fpop-clear{display:block;margin-top:6px;font-size:11px;color:#8896A6;background:none;border:none;cursor:pointer;padding:2px 0;text-align:left}
+.th-filter-pop .fpop-clear:hover{color:#C41E3A}
 
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
 .no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
@@ -207,8 +210,6 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
   .pager-info{text-align:center}
   .pager-size-wrap{justify-content:center}
   .popular{gap:4px}
-  .filter-bar{flex-direction:column;align-items:stretch;padding:10px 12px}
-  .filter-bar input{width:100%}
 }
 
 /* ─── Tablet ────────────────────────────────────────────────────────────── */
@@ -294,12 +295,6 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
     </div>
     <div id="skeletonTable"></div>
     <div id="noResults" class="no-results hidden">No records found. Try a different search.</div>
-    <div id="filterBar" class="filter-bar hidden">
-      <span class="filter-label">Filter:</span>
-      <input type="text" id="filterEmp" placeholder="Employer" aria-label="Filter by employer">
-      <input type="text" id="filterJob" placeholder="Job title" aria-label="Filter by job title">
-      <button type="button" class="filter-clear" id="filterClear">Clear filters</button>
-    </div>
     <div id="tableContainer" class="hidden"></div>
     <div id="pagerContainer" class="pager hidden"></div>
   </div>
@@ -345,10 +340,12 @@ let hasSearched     = false;
 let sortCol         = "wage_rate_of_pay_from";
 let sortDir         = "DESC";
 
-let cachedResults = [];
-let cacheKey     = "";
-let filterEmp    = "";
-let filterJob    = "";
+let cachedResults  = [];
+let cacheKey       = "";
+let filterEmp      = "";
+let filterJob      = "";
+let openFilterCol  = "";
+let filterDebounce;
 
 const $ = (id) => document.getElementById(id);
 const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
@@ -445,10 +442,23 @@ function renderTable(records) {
     </div>
   </div>`).join("");
 
+  const funnelSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
   const ths = SORT_COLS.map(c => {
     const active = sortCol === c.key;
     const arrow  = active ? (sortDir === "ASC" ? "\u25B2" : "\u25BC") : "\u25B2";
-    return `<th class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
+    if (c.key !== "employer_name" && c.key !== "job_title") {
+      return `<th class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
+    }
+    const fval    = c.key === "employer_name" ? filterEmp : filterJob;
+    const fActive = fval.trim() !== "";
+    const safeVal = fval.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    return `<th class="${active ? "sorted" : ""} th-filterable" data-col="${c.key}">` +
+      `<div class="th-inner"><span>${c.label}<span class="sort-arrow">${arrow}</span></span>` +
+      `<button class="th-filter-btn${fActive ? " active" : ""}" data-fcol="${c.key}" aria-label="Filter ${c.label}" title="Filter ${c.label}">${funnelSvg}</button></div>` +
+      `<div class="th-filter-pop" id="fpop-${c.key}">` +
+      `<input type="text" placeholder="Filter\u2026" value="${safeVal}" autocomplete="off" data-fcol="${c.key}">` +
+      (fActive ? `<button class="fpop-clear" data-fcol="${c.key}">Clear filter</button>` : "") +
+      `</div></th>`;
   }).join("");
 
   return `<div class="tbl-wrap"><div class="tbl-scroll"><table>
@@ -509,9 +519,73 @@ function renderPager(displayCount) {
   };
 }
 
+function bindFilterIcons() {
+  const container = $("tableContainer");
+  if (!container) return;
+
+  container.querySelectorAll(".th-filter-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const col = btn.dataset.fcol;
+      const pop = document.getElementById("fpop-" + col);
+      if (!pop) return;
+      const wasOpen = pop.classList.contains("open");
+      container.querySelectorAll(".th-filter-pop.open").forEach(p => p.classList.remove("open"));
+      if (!wasOpen) {
+        pop.classList.add("open");
+        openFilterCol = col;
+        pop.querySelector("input")?.focus();
+      } else {
+        openFilterCol = "";
+      }
+    });
+  });
+
+  container.querySelectorAll(".th-filter-pop input").forEach(input => {
+    input.addEventListener("input", () => {
+      const col = input.dataset.fcol;
+      if (col === "employer_name") filterEmp = input.value;
+      else if (col === "job_title") filterJob = input.value;
+      openFilterCol = col;
+      clearTimeout(filterDebounce);
+      filterDebounce = setTimeout(() => { currentPage = 1; runPage(); }, 200);
+    });
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" || e.key === "Enter") {
+        container.querySelectorAll(".th-filter-pop.open").forEach(p => p.classList.remove("open"));
+        openFilterCol = "";
+      }
+    });
+  });
+
+  container.querySelectorAll(".fpop-clear").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const col = btn.dataset.fcol;
+      if (col === "employer_name") filterEmp = "";
+      else if (col === "job_title") filterJob = "";
+      openFilterCol = "";
+      currentPage = 1;
+      runPage();
+    });
+  });
+
+  // Reopen the popover that was active before re-render
+  if (openFilterCol) {
+    const pop = document.getElementById("fpop-" + openFilterCol);
+    if (pop) {
+      pop.classList.add("open");
+      const inp = pop.querySelector("input");
+      if (inp) { inp.focus(); const l = inp.value.length; inp.setSelectionRange(l, l); }
+    }
+  }
+}
+
 function bindSortHeaders() {
   $("tableContainer").querySelectorAll("th[data-col]").forEach(th => {
-    th.addEventListener("click", () => {
+    th.addEventListener("click", (e) => {
+      if (e.target.closest(".th-filter-btn, .th-filter-pop")) return;
       const col = th.dataset.col;
       if (sortCol === col) {
         sortDir = sortDir === "ASC" ? "DESC" : "ASC";
@@ -554,7 +628,6 @@ async function runPage() {
     const start = (currentPage - 1) * currentPageSize;
     const records = filtered.slice(start, start + currentPageSize);
 
-    $("filterBar").classList.toggle("hidden", cachedResults.length === 0);
     $("tableContainer").innerHTML = renderTable(records);
     $("tableContainer").classList.remove("hidden");
     $("resultsBadge").textContent = filteredCount === totalCount && !filterEmp && !filterJob
@@ -569,6 +642,7 @@ async function runPage() {
     }
     renderPager(filteredCount);
     bindSortHeaders();
+    bindFilterIcons();
     bindRowClicks();
   } catch (err) {
     $("errorMsg").textContent = err.message || "Search failed.";
@@ -587,8 +661,7 @@ async function executeSearch() {
   sortDir          = "DESC";
   filterEmp        = "";
   filterJob        = "";
-  if ($("filterEmp")) $("filterEmp").value = "";
-  if ($("filterJob")) $("filterJob").value = "";
+  openFilterCol    = "";
 
   searchBtn.disabled      = true;
   searchBtnText.textContent = "Searching\u2026";
@@ -631,27 +704,13 @@ $("searchForm").addEventListener("submit", async ev => {
     input.addEventListener("blur",  () => inner.classList.remove("focused"));
   });
 
-// ─── Result filters ──────────────────────────────────────────────────────────
+// ─── Close filter popovers on outside click ───────────────────────────────────
 
-let filterDebounce;
-function onFilterChange() {
-  filterEmp = $("filterEmp").value;
-  filterJob = $("filterJob").value;
-  clearTimeout(filterDebounce);
-  filterDebounce = setTimeout(() => {
-    currentPage = 1;
-    runPage();
-  }, 150);
-}
-$("filterEmp").addEventListener("input", onFilterChange);
-$("filterJob").addEventListener("input", onFilterChange);
-$("filterClear").addEventListener("click", () => {
-  filterEmp = "";
-  filterJob = "";
-  $("filterEmp").value = "";
-  $("filterJob").value = "";
-  currentPage = 1;
-  runPage();
+document.addEventListener("click", () => {
+  if (!openFilterCol) return;
+  const pop = document.getElementById("fpop-" + openFilterCol);
+  if (pop) pop.classList.remove("open");
+  openFilterCol = "";
 });
 
 // ─── Clear button ─────────────────────────────────────────────────────────────
