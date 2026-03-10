@@ -177,6 +177,7 @@ th.th-filterable{position:relative}
 
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
 .no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
+.no-filter-match{padding:20px;text-align:center;color:#9CA3AF;font-size:13px}
 .disclaimer{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(196,163,90,.05);border:1px solid rgba(196,163,90,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#000;line-height:1.5;text-align:center}
 .disclaimer strong{color:#000}
 
@@ -406,17 +407,21 @@ function html(s) {
 
 // ─── Render ──────────────────────────────────────────────────────────────────
 
-function renderTable(records) {
-  const rows = (records || []).map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
+function renderTable(records, isFilterEmpty) {
+  const recs = records || [];
+  const emptyMsg = isFilterEmpty ? "No matching records. Clear or change your filter above." : "No records found. Try a different search.";
+  const rows = recs.length
+    ? recs.map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
     <td class="emp"><a href="/record?id=${html(r.id)}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a></td>
     <td class="job">${html(r.job_title)}</td>
     <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
     <td class="loc">${html(fmtLoc(r))}</td>
     <td class="date">${html(r.begin_date)}</td>
     <td class="date">${html(r.end_date)}</td>
-  </tr>`).join("");
+  </tr>`).join("")
+    : `<tr><td colspan="6" class="no-filter-match">${emptyMsg}</td></tr>`;
 
-  const cards = (records || []).map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
+  const cards = recs.length ? recs.map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
     <a href="/record?id=${html(r.id)}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a>
     <div class="rc-job">${html(r.job_title)}</div>
     <div class="rc-grid">
@@ -425,7 +430,7 @@ function renderTable(records) {
       <div><div class="rc-label">Start</div><div class="rc-val">${html(r.begin_date)}</div></div>
       <div><div class="rc-label">End</div><div class="rc-val">${html(r.end_date)}</div></div>
     </div>
-  </div>`).join("");
+  </div>`).join("") : "";
 
   const funnelSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
   const FILTERABLE = ["employer_name", "job_title", "worksite_state"];
@@ -616,15 +621,21 @@ async function runPage() {
     const start = (currentPage - 1) * currentPageSize;
     const records = filtered.slice(start, start + currentPageSize);
 
-    $("tableContainer").innerHTML = renderTable(records);
+    const isFilterEmpty = filteredCount === 0 && !!(filterEmp || filterJob || filterLoc);
+    $("tableContainer").innerHTML = renderTable(records, isFilterEmpty);
     $("tableContainer").classList.remove("hidden");
     $("resultsBadge").textContent = filteredCount === totalCount && !filterEmp && !filterJob && !filterLoc
       ? `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`
       : `${filteredCount.toLocaleString()} of ${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
     if (filteredCount === 0) {
-      $("noResults").classList.remove("hidden");
-      $("noResults").textContent = filterEmp || filterJob || filterLoc ? "No matches for filters. Clear or change filter terms above." : "No records found. Try a different search.";
-      // Keep table visible (with empty body) so user can still use filter icons to fix their search
+      const isFilterEmpty = !!(filterEmp || filterJob || filterLoc);
+      if (isFilterEmpty) {
+        $("noResults").classList.add("hidden");
+      } else {
+        $("noResults").classList.remove("hidden");
+        $("noResults").textContent = "No records found. Try a different search.";
+      }
+      // Table always stays visible; when filter-empty, message is in table body
     } else {
       $("noResults").classList.add("hidden");
     }
