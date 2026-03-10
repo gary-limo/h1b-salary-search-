@@ -164,6 +164,14 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 .pager-btn:disabled{background:#F5F5F4;color:#C0C7CF;cursor:not-allowed;opacity:.7}
 .pager-page{padding:0 12px;font-size:13px;color:#5A6478;font-weight:600}
 
+.filter-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 14px;background:#fff;border:1px solid #E2DDD6;border-radius:10px 10px 0 0;border-bottom:none;margin-top:10px;box-shadow:0 1px 2px rgba(27,42,74,.03)}
+.filter-bar .filter-label{font-size:12px;color:#8896A6;font-weight:600}
+.filter-bar input{width:140px;padding:6px 10px;border:1px solid #E2DDD6;border-radius:6px;font-size:13px;outline:none;transition:border .15s}
+.filter-bar input:focus{border-color:#C4A35A;box-shadow:0 0 0 2px rgba(196,163,90,.15)}
+.filter-bar input::placeholder{color:#B8BEC8}
+.filter-bar .filter-clear{padding:6px 12px;font-size:12px;color:#8896A6;background:transparent;border:none;cursor:pointer;border-radius:6px;transition:all .1s}
+.filter-bar .filter-clear:hover{color:#C41E3A;background:rgba(196,30,58,.06)}
+
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
 .no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
 .disclaimer{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(196,163,90,.05);border:1px solid rgba(196,163,90,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#000;line-height:1.5;text-align:center}
@@ -199,6 +207,8 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
   .pager-info{text-align:center}
   .pager-size-wrap{justify-content:center}
   .popular{gap:4px}
+  .filter-bar{flex-direction:column;align-items:stretch;padding:10px 12px}
+  .filter-bar input{width:100%}
 }
 
 /* ─── Tablet ────────────────────────────────────────────────────────────── */
@@ -284,6 +294,12 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
     </div>
     <div id="skeletonTable"></div>
     <div id="noResults" class="no-results hidden">No records found. Try a different search.</div>
+    <div id="filterBar" class="filter-bar hidden">
+      <span class="filter-label">Filter:</span>
+      <input type="text" id="filterEmp" placeholder="Employer" aria-label="Filter by employer">
+      <input type="text" id="filterJob" placeholder="Job title" aria-label="Filter by job title">
+      <button type="button" class="filter-clear" id="filterClear">Clear filters</button>
+    </div>
     <div id="tableContainer" class="hidden"></div>
     <div id="pagerContainer" class="pager hidden"></div>
   </div>
@@ -331,6 +347,8 @@ let sortDir         = "DESC";
 
 let cachedResults = [];
 let cacheKey     = "";
+let filterEmp    = "";
+let filterJob    = "";
 
 const $ = (id) => document.getElementById(id);
 const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
@@ -341,6 +359,17 @@ const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
 
 function getCacheKey(emp, job, loc) {
   return `${emp}|${job}|${loc}|${sortCol}|${sortDir}`;
+}
+
+function applyResultFilters(records) {
+  const emp = filterEmp.trim().toLowerCase();
+  const job = filterJob.trim().toLowerCase();
+  if (!emp && !job) return records;
+  return records.filter((r) => {
+    if (emp && !(r.employer_name || "").toLowerCase().includes(emp)) return false;
+    if (job && !(r.job_title || "").toLowerCase().includes(job)) return false;
+    return true;
+  });
 }
 
 async function apiFetchBatch(emp, job, loc, apiPage, apiPageSize) {
@@ -441,14 +470,15 @@ function renderSkeleton() {
     <tbody>${rows}</tbody></table></div></div>`;
 }
 
-function renderPager() {
-  const showPager = totalCount > 0;
+function renderPager(displayCount) {
+  const count = displayCount ?? totalCount;
+  const showPager = count > 0;
   $("pagerContainer").classList.toggle("hidden", !showPager);
   if (!showPager) return;
 
-  const tp = Math.ceil(totalCount / currentPageSize);
+  const tp = Math.ceil(count / currentPageSize);
   const s  = (currentPage - 1) * currentPageSize + 1;
-  const e  = Math.min(currentPage * currentPageSize, totalCount);
+  const e  = Math.min(currentPage * currentPageSize, count);
 
   const sizeOptions = PAGE_SIZE_OPTIONS.map(n =>
     `<option value="${n}" ${n === currentPageSize ? "selected" : ""}>${n}</option>`
@@ -456,7 +486,7 @@ function renderPager() {
 
   $("pagerContainer").innerHTML = `
     <div class="pager-left">
-      <span class="pager-info">${s}\u2013${e} of ${totalCount.toLocaleString()}</span>
+      <span class="pager-info">${s}\u2013${e} of ${count.toLocaleString()}</span>
       <label class="pager-size-wrap">
         <span class="pager-size-label">per page</span>
         <select class="pager-size-select" id="pageSizeSelect" aria-label="Results per page">
@@ -519,18 +549,25 @@ async function runPage() {
   }
   try {
     await ensureCacheHasPage(emp, job, loc);
+    const filtered = applyResultFilters(cachedResults);
+    const filteredCount = filtered.length;
     const start = (currentPage - 1) * currentPageSize;
-    const records = cachedResults.slice(start, start + currentPageSize);
+    const records = filtered.slice(start, start + currentPageSize);
+
+    $("filterBar").classList.toggle("hidden", cachedResults.length === 0);
     $("tableContainer").innerHTML = renderTable(records);
     $("tableContainer").classList.remove("hidden");
-    $("resultsBadge").textContent = `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
-    if (totalCount === 0) {
+    $("resultsBadge").textContent = filteredCount === totalCount && !filterEmp && !filterJob
+      ? `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`
+      : `${filteredCount.toLocaleString()} of ${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
+    if (filteredCount === 0) {
       $("noResults").classList.remove("hidden");
+      $("noResults").textContent = filterEmp || filterJob ? "No matches for filters. Try different terms." : "No records found. Try a different search.";
       $("tableContainer").classList.add("hidden");
     } else {
       $("noResults").classList.add("hidden");
     }
-    renderPager();
+    renderPager(filteredCount);
     bindSortHeaders();
     bindRowClicks();
   } catch (err) {
@@ -548,6 +585,10 @@ async function executeSearch() {
   totalCount       = 0;
   sortCol          = "wage_rate_of_pay_from";
   sortDir          = "DESC";
+  filterEmp        = "";
+  filterJob        = "";
+  if ($("filterEmp")) $("filterEmp").value = "";
+  if ($("filterJob")) $("filterJob").value = "";
 
   searchBtn.disabled      = true;
   searchBtnText.textContent = "Searching\u2026";
@@ -589,6 +630,29 @@ $("searchForm").addEventListener("submit", async ev => {
     input.addEventListener("focus", () => inner.classList.add("focused"));
     input.addEventListener("blur",  () => inner.classList.remove("focused"));
   });
+
+// ─── Result filters ──────────────────────────────────────────────────────────
+
+let filterDebounce;
+function onFilterChange() {
+  filterEmp = $("filterEmp").value;
+  filterJob = $("filterJob").value;
+  clearTimeout(filterDebounce);
+  filterDebounce = setTimeout(() => {
+    currentPage = 1;
+    runPage();
+  }, 150);
+}
+$("filterEmp").addEventListener("input", onFilterChange);
+$("filterJob").addEventListener("input", onFilterChange);
+$("filterClear").addEventListener("click", () => {
+  filterEmp = "";
+  filterJob = "";
+  $("filterEmp").value = "";
+  $("filterJob").value = "";
+  currentPage = 1;
+  runPage();
+});
 
 // ─── Clear button ─────────────────────────────────────────────────────────────
 
