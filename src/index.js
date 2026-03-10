@@ -118,8 +118,9 @@ async function handleSearch(params, db, cors) {
   const bindings = [];
 
   if (employer) {
-    where.push("f.employer_name LIKE ?");
-    bindings.push(`%${employer.toLowerCase()}%`);
+    // Prefix match only - enables index use on employer_name (users typically type start of name)
+    where.push("w.employer_name LIKE ?");
+    bindings.push(`${employer.toLowerCase()}%`);
   }
   if (job) {
     where.push("f.job_title LIKE ?");
