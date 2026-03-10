@@ -13,7 +13,8 @@
  * Requests with no matching header are rejected (403).
  */
 
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 100;
+const ALLOWED_PAGE_SIZES = new Set([10, 25, 50, 100]);
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
 
@@ -104,12 +105,14 @@ async function handleSearch(params, db, cors) {
   }
 
   const page = Math.min(MAX_PAGE, Math.max(1, parseInt(params.get("page") || "1", 10) || 1));
+  const requestedSize = parseInt(params.get("pageSize") || String(DEFAULT_PAGE_SIZE), 10);
+  const pageSize = ALLOWED_PAGE_SIZES.has(requestedSize) ? requestedSize : DEFAULT_PAGE_SIZE;
   const sortParam = params.get("sort") || "wage_rate_of_pay_from";
   const dirParam = (params.get("dir") || "DESC").toUpperCase();
 
   const sort = SORTABLE.has(sortParam) ? sortParam : "wage_rate_of_pay_from";
   const dir = dirParam === "ASC" ? "ASC" : "DESC";
-  const offset = (page - 1) * PAGE_SIZE;
+  const offset = (page - 1) * pageSize;
 
   const where = [];
   const bindings = [];
@@ -150,7 +153,7 @@ async function handleSearch(params, db, cors) {
            JOIN h1b_wages w ON w.id = f.rowid
            ${whereClause}
            ORDER BY w.${sort} ${dir} NULLS LAST
-           LIMIT ${PAGE_SIZE} OFFSET ${offset}`
+           LIMIT ${pageSize} OFFSET ${offset}`
         )
         .bind(...bindings)
         .all(),
@@ -160,7 +163,7 @@ async function handleSearch(params, db, cors) {
       {
         total: countRow?.total ?? 0,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
         results: rows.results,
       },
       200,

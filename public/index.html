@@ -150,13 +150,19 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 
 .results-cards{display:none}
 
-.pager{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#fff;border-radius:10px;border:1px solid #E2DDD6}
-.pager-info{font-size:12px;color:#8896A6}
-.pager-btns{display:flex;align-items:center;gap:4px}
-.pager-btn{padding:6px 12px;border-radius:6px;border:1px solid #E2DDD6;background:#fff;color:#1B2A4A;cursor:pointer;display:flex;align-items:center;font-size:12px;font-weight:600;transition:all .1s}
-.pager-btn:hover:not(:disabled){background:#F8F6F3;border-color:#C4A35A}
-.pager-btn:disabled{background:#F5F5F4;color:#C0C7CF;cursor:not-allowed}
-.pager-page{padding:0 10px;font-size:12px;color:#5A6478;font-weight:600}
+.pager{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px;padding:14px 18px;background:#fff;border-radius:12px;border:1px solid #E2DDD6;box-shadow:0 1px 3px rgba(27,42,74,.04)}
+.pager-left{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.pager-info{font-size:13px;color:#5A6478;font-weight:500}
+.pager-size-wrap{display:flex;align-items:center;gap:6px}
+.pager-size-label{font-size:12px;color:#8896A6;white-space:nowrap}
+.pager-size-select{padding:6px 10px;border-radius:8px;border:1px solid #E2DDD6;background:#fff;color:#1B2A4A;font-size:13px;font-weight:600;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%235A6478' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
+.pager-size-select:hover{border-color:#C4A35A}
+.pager-size-select:focus{outline:none;border-color:#C4A35A;box-shadow:0 0 0 2px rgba(196,163,90,.2)}
+.pager-btns{display:flex;align-items:center;gap:2px}
+.pager-btn{padding:8px 14px;border-radius:8px;border:1px solid #E2DDD6;background:#fff;color:#1B2A4A;cursor:pointer;display:flex;align-items:center;font-size:13px;font-weight:600;transition:all .15s}
+.pager-btn:hover:not(:disabled){background:#F8F6F3;border-color:#C4A35A;color:#1B2A4A}
+.pager-btn:disabled{background:#F5F5F4;color:#C0C7CF;cursor:not-allowed;opacity:.7}
+.pager-page{padding:0 12px;font-size:13px;color:#5A6478;font-weight:600}
 
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
 .no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
@@ -188,8 +194,10 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
   .result-card .rc-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#8896A6;font-weight:600}
   .result-card .rc-val{font-size:13px;color:#1B2A4A;font-weight:500}
   .result-card .rc-val.money{font-weight:700;font-variant-numeric:tabular-nums}
-  .pager{flex-wrap:wrap;gap:6px;padding:10px}
-  .pager-info{width:100%;text-align:center}
+  .pager{flex-wrap:wrap;gap:8px;padding:12px}
+  .pager-left{flex-direction:column;align-items:stretch}
+  .pager-info{text-align:center}
+  .pager-size-wrap{justify-content:center}
   .popular{gap:4px}
 }
 
@@ -287,7 +295,8 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 </main>
 
 <script>
-const PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE = 100;
 
 const POPULAR = [
   { label: "Google",            employer: "Google",           job: "",                  loc: "" },
@@ -312,11 +321,12 @@ const SORT_COLS = [
   { key: "end_date",              label: "End"         },
 ];
 
-let currentPage = 1;
-let totalCount  = 0;
-let hasSearched = false;
-let sortCol     = "wage_rate_of_pay_from";
-let sortDir     = "DESC";
+let currentPage   = 1;
+let currentPageSize = DEFAULT_PAGE_SIZE;
+let totalCount    = 0;
+let hasSearched  = false;
+let sortCol      = "wage_rate_of_pay_from";
+let sortDir      = "DESC";
 
 const $ = (id) => document.getElementById(id);
 const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
@@ -327,12 +337,13 @@ const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
 
 async function apiSearch(emp, job, loc) {
   const params = new URLSearchParams({
-    employer: emp.trim(),
-    job:      job.trim(),
-    location: loc.trim(),
-    page:     currentPage,
-    sort:     sortCol,
-    dir:      sortDir,
+    employer:  emp.trim(),
+    job:       job.trim(),
+    location:  loc.trim(),
+    page:      currentPage,
+    pageSize:  currentPageSize,
+    sort:      sortCol,
+    dir:       sortDir,
   });
   const res = await fetch(`/api/search?${params}`);
   if (!res.ok) {
@@ -411,20 +422,41 @@ function renderSkeleton() {
 }
 
 function renderPager() {
-  if (totalCount <= PAGE_SIZE) { $("pagerContainer").classList.add("hidden"); return; }
-  const tp = Math.ceil(totalCount / PAGE_SIZE);
-  const s  = (currentPage - 1) * PAGE_SIZE + 1;
-  const e  = Math.min(currentPage * PAGE_SIZE, totalCount);
-  $("pagerContainer").classList.remove("hidden");
+  const showPager = totalCount > 0;
+  $("pagerContainer").classList.toggle("hidden", !showPager);
+  if (!showPager) return;
+
+  const tp = Math.ceil(totalCount / currentPageSize);
+  const s  = (currentPage - 1) * currentPageSize + 1;
+  const e  = Math.min(currentPage * currentPageSize, totalCount);
+
+  const sizeOptions = PAGE_SIZE_OPTIONS.map(n => 
+    `<option value="${n}" ${n === currentPageSize ? "selected" : ""}>${n}</option>`
+  ).join("");
+
   $("pagerContainer").innerHTML = `
-    <span class="pager-info">${s}\u2013${e} of ${totalCount.toLocaleString()}</span>
+    <div class="pager-left">
+      <span class="pager-info">${s}\u2013${e} of ${totalCount.toLocaleString()}</span>
+      <label class="pager-size-wrap">
+        <span class="pager-size-label">per page</span>
+        <select class="pager-size-select" id="pageSizeSelect" aria-label="Results per page">
+          ${sizeOptions}
+        </select>
+      </label>
+    </div>
     <div class="pager-btns">
-      <button class="pager-btn" id="prevBtn" ${currentPage <= 1 ? "disabled" : ""}>Prev</button>
+      <button class="pager-btn" id="prevBtn" ${currentPage <= 1 ? "disabled" : ""} aria-label="Previous page">\u2190</button>
       <span class="pager-page">${currentPage} / ${tp.toLocaleString()}</span>
-      <button class="pager-btn" id="nextBtn" ${currentPage >= tp ? "disabled" : ""}>Next</button>
+      <button class="pager-btn" id="nextBtn" ${currentPage >= tp ? "disabled" : ""} aria-label="Next page">\u2192</button>
     </div>`;
+
   $("prevBtn").onclick = () => { if (currentPage > 1) { currentPage--; runPage(); } };
   $("nextBtn").onclick = () => { if (currentPage < tp) { currentPage++; runPage(); } };
+  $("pageSizeSelect").onchange = () => {
+    currentPageSize = parseInt($("pageSizeSelect").value, 10);
+    currentPage = 1;
+    runPage();
+  };
 }
 
 function bindSortHeaders() {
