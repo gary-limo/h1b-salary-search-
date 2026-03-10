@@ -166,8 +166,10 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 
 th.th-filterable{position:relative}
 .th-inner{display:inline-flex;align-items:center;gap:5px;width:100%}
-.th-filter-btn{background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;padding:2px 3px;border-radius:3px;display:inline-flex;align-items:center;flex-shrink:0;line-height:1;transition:color .12s}
-.th-filter-btn:hover,.th-filter-btn.active{color:#B8A062}
+.th-filter-btn{background:none;border:none;color:rgba(255,255,255,.3);cursor:pointer;padding:3px 5px;border-radius:4px;display:inline-flex;align-items:center;flex-shrink:0;line-height:1;transition:color .12s,background .12s}
+.th-filter-btn:hover{color:#B8A062}
+.th-filter-btn.active{color:#B8A062;background:rgba(184,160,98,.35)}
+.th-filter-btn.active svg{stroke-width:3}
 .th-filter-pop{position:absolute;top:100%;left:0;z-index:400;background:#fff;border:1px solid #E2DDD6;border-radius:8px;box-shadow:0 6px 20px rgba(27,42,74,.14);padding:10px;min-width:210px;display:none}
 .th-filter-pop.open{display:block}
 .th-filter-pop input{width:100%;padding:7px 10px;border:1px solid #E2DDD6;border-radius:6px;font-size:13px;color:#1B2A4A;outline:none;font-family:inherit}
@@ -447,7 +449,7 @@ function renderTable(records, isFilterEmpty) {
       `<div class="th-inner"><span>${c.label}<span class="sort-arrow">${arrow}</span></span>` +
       `<button class="th-filter-btn${fActive ? " active" : ""}" data-fcol="${c.key}" aria-label="Filter ${c.label}" title="Filter ${c.label}">${funnelSvg}</button></div>` +
       `<div class="th-filter-pop" id="fpop-${c.key}">` +
-      `<input type="text" placeholder="Filter\u2026" value="${safeVal}" autocomplete="off" data-fcol="${c.key}">` +
+      `<input type="text" placeholder="Type and hit Enter" value="${safeVal}" autocomplete="off" data-fcol="${c.key}">` +
       (fActive ? `<button class="fpop-clear" data-fcol="${c.key}">Clear filter</button>` : "") +
       `</div></th>`;
   }).join("");
