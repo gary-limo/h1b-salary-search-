@@ -11,7 +11,6 @@ node_modules/
 # SQLite DB (regenerate with scripts/create_db.py)
 h1b_wages.db
 h1b_wages_export.sql
-h1b_salary_compare_export.sql
 
 # wrangler files
 .wrangler
