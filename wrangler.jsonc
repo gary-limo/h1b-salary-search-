@@ -11,6 +11,16 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
+  "r2_buckets": [
+    {
+      "binding": "SQL_LOGS",
+      "bucket_name": "h1b-sql-logs"
+    },
+    {
+      "binding": "SEARCH_LOGS",
+      "bucket_name": "h1b-search-logs"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

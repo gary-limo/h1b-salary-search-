@@ -42,7 +42,7 @@ const SUGGEST_FIELDS = {
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const compareEnabled = isCompareEnabled(env);
     const staticRouteMap = {
@@ -95,7 +95,7 @@ export default {
       }
 
       if (url.pathname === "/api/search") {
-        return handleSearch(url.searchParams, env.DB, cors);
+        return handleSearch(url.searchParams, env.DB, cors, env, ctx);
       }
       if (url.pathname === "/api/suggest") {
         return handleSuggest(url.searchParams, env.DB, cors);
@@ -124,7 +124,7 @@ export default {
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
-async function handleSearch(params, db, cors) {
+async function handleSearch(params, db, cors, env, ctx) {
   const employer = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const job = (params.get("job") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const location = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
@@ -162,41 +162,42 @@ async function handleSearch(params, db, cors) {
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+  const countSQL = `SELECT COUNT(*) AS total FROM h1b_wages ${whereClause}`;
+  const dataSQL  = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
+
+  const t0 = Date.now();
   try {
     const [countRow, rows] = await Promise.all([
-      db
-        .prepare(
-          `SELECT COUNT(*) AS total
-           FROM h1b_wages
-           ${whereClause}`
-        )
-        .bind(...bindings)
-        .first(),
-      db
-        .prepare(
-          `SELECT id, employer_name, job_title,
-                  wage_rate_of_pay_from,
-                  worksite_city, worksite_state,
-                  begin_date, end_date
-           FROM h1b_wages
-           ${whereClause}
-           ORDER BY ${sort} ${dir} NULLS LAST
-           LIMIT ${pageSize} OFFSET ${offset}`
-        )
-        .bind(...bindings)
-        .all(),
+      db.prepare(countSQL).bind(...bindings).first(),
+      db.prepare(dataSQL).bind(...bindings).all(),
     ]);
+    const duration = Date.now() - t0;
+    const total = countRow?.total ?? 0;
 
-    return jsonResponse(
-      {
-        total: countRow?.total ?? 0,
-        page,
-        pageSize,
-        results: rows.results,
-      },
-      200,
-      cors
-    );
+    // Fire-and-forget logging — never blocks the response
+    if (ctx && (env.SQL_LOGS || env.SEARCH_LOGS)) {
+      ctx.waitUntil(Promise.all([
+        logSQL(env.SQL_LOGS, {
+          route: "/api/search",
+          sql: resolveSQL(countSQL, bindings) + ";\n" + resolveSQL(dataSQL, bindings),
+          duration_ms: duration,
+          rows_returned: rows.results?.length ?? 0,
+        }),
+        logSearch(env.SEARCH_LOGS, {
+          employer: employer || null,
+          job: job || null,
+          location: location || null,
+          sort,
+          dir,
+          page,
+          page_size: pageSize,
+          total_results: total,
+          duration_ms: duration,
+        }),
+      ]));
+    }
+
+    return jsonResponse({ total, page, pageSize, results: rows.results }, 200, cors);
   } catch (err) {
     console.error("Search error:", err);
     return jsonResponse({ error: "Search failed. Please try again." }, 500, cors);
@@ -527,4 +528,48 @@ function isCompareEnabled(env) {
   const raw = env?.COMPARE_ENABLED;
   if (raw == null) return DEFAULT_COMPARE_ENABLED;
   return String(raw).toLowerCase() === "true";
+}
+
+// ─── R2 Logging ──────────────────────────────────────────────────────────────
+
+function r2Key(prefix) {
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm   = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const dd   = String(now.getUTCDate()).padStart(2, "0");
+  const hh   = String(now.getUTCHours()).padStart(2, "0");
+  const min  = String(now.getUTCMinutes()).padStart(2, "0");
+  const ss   = String(now.getUTCSeconds()).padStart(2, "0");
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${prefix}/${yyyy}/${mm}/${dd}/${hh}-${min}-${ss}-${rand}.json`;
+}
+
+function resolveSQL(template, params) {
+  let i = 0;
+  return template.replace(/\?/g, () => {
+    const v = params[i++];
+    if (v == null) return "NULL";
+    if (typeof v === "string") return `'${v.replace(/'/g, "''")}'`;
+    return String(v);
+  });
+}
+
+async function logSQL(bucket, data) {
+  if (!bucket) return;
+  try {
+    const body = JSON.stringify({ ts: new Date().toISOString(), ...data });
+    await bucket.put(r2Key("sql"), body, { httpMetadata: { contentType: "application/json" } });
+  } catch (e) {
+    console.error("SQL log error:", e);
+  }
+}
+
+async function logSearch(bucket, data) {
+  if (!bucket) return;
+  try {
+    const body = JSON.stringify({ ts: new Date().toISOString(), ...data });
+    await bucket.put(r2Key("search"), body, { httpMetadata: { contentType: "application/json" } });
+  } catch (e) {
+    console.error("Search log error:", e);
+  }
 }
