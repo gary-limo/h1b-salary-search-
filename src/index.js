@@ -124,6 +124,13 @@ export default {
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
+const CACHE_TTL_EDGE = 86400;       // Cache API: 24 hours
+const CACHE_TTL_KV   = 7776000;     // KV: 90 days
+
+function buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize) {
+  return `search:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
+}
+
 async function handleSearch(params, db, cors, env, ctx) {
   const employer = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const job = (params.get("job") || "").trim().slice(0, MAX_INPUT_LENGTH);
@@ -143,11 +150,45 @@ async function handleSearch(params, db, cors, env, ctx) {
   const dir = dirParam === "ASC" ? "ASC" : "DESC";
   const offset = (page - 1) * pageSize;
 
+  const kvKey = buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize);
+  const cacheUrl = new Request(`https://cache.internal/${kvKey}`);
+  const searchMeta = { employer: employer || null, job: job || null, location: location || null, sort, dir, page, page_size: pageSize };
+
+  // ── Tier 1: Edge Cache (per-datacenter, fastest) ───────────────────────────
+  const t0 = Date.now();
+  try {
+    const edgeCached = await caches.default.match(cacheUrl);
+    if (edgeCached) {
+      if (ctx) {
+        ctx.waitUntil(logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "edge", duration_ms: Date.now() - t0 }));
+      }
+      return edgeCached;
+    }
+  } catch {}
+
+  // ── Tier 2: KV (global, durable) ──────────────────────────────────────────
+  try {
+    if (env.SEARCH_CACHE) {
+      const kvData = await env.SEARCH_CACHE.get(kvKey, { type: "json" });
+      if (kvData) {
+        const kvDuration = Date.now() - t0;
+        const response = jsonResponse(kvData, 200, cors);
+        if (ctx) {
+          ctx.waitUntil(Promise.all([
+            caches.default.put(cacheUrl, response.clone()),
+            logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "kv", duration_ms: kvDuration }),
+          ]));
+        }
+        return response;
+      }
+    }
+  } catch {}
+
+  // ── Tier 3: D1 Database (source of truth) ──────────────────────────────────
   const where = [];
   const bindings = [];
 
   if (employer) {
-    // Prefix match — uses idx_h1b_employer (B-tree range scan)
     where.push("employer_name LIKE ?");
     bindings.push(`${employer.toLowerCase()}%`);
   }
@@ -161,11 +202,9 @@ async function handleSearch(params, db, cors, env, ctx) {
   }
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
   const countSQL = `SELECT COUNT(*) AS total FROM h1b_wages ${whereClause}`;
   const dataSQL  = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
 
-  const t0 = Date.now();
   try {
     const [countRow, rows] = await Promise.all([
       db.prepare(countSQL).bind(...bindings).first(),
@@ -173,31 +212,24 @@ async function handleSearch(params, db, cors, env, ctx) {
     ]);
     const duration = Date.now() - t0;
     const total = countRow?.total ?? 0;
+    const payload = { total, page, pageSize, results: rows.results };
+    const response = jsonResponse(payload, 200, cors);
 
-    // Fire-and-forget logging — never blocks the response
-    if (ctx && (env.SQL_LOGS || env.SEARCH_LOGS)) {
+    if (ctx) {
       ctx.waitUntil(Promise.all([
+        caches.default.put(cacheUrl, response.clone()),
+        env.SEARCH_CACHE ? env.SEARCH_CACHE.put(kvKey, JSON.stringify(payload), { expirationTtl: CACHE_TTL_KV }) : Promise.resolve(),
         logSQL(env.SQL_LOGS, {
           route: "/api/search",
           sql: resolveSQL(countSQL, bindings) + ";\n" + resolveSQL(dataSQL, bindings),
           duration_ms: duration,
           rows_returned: rows.results?.length ?? 0,
         }),
-        logSearch(env.SEARCH_LOGS, {
-          employer: employer || null,
-          job: job || null,
-          location: location || null,
-          sort,
-          dir,
-          page,
-          page_size: pageSize,
-          total_results: total,
-          duration_ms: duration,
-        }),
+        logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "d1", total_results: total, duration_ms: duration }),
       ]));
     }
 
-    return jsonResponse({ total, page, pageSize, results: rows.results }, 200, cors);
+    return response;
   } catch (err) {
     console.error("Search error:", err);
     return jsonResponse({ error: "Search failed. Please try again." }, 500, cors);

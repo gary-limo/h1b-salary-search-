@@ -11,6 +11,12 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
+  "kv_namespaces": [
+    {
+      "binding": "SEARCH_CACHE",
+      "id": "66dedf0a9ea940deaadacbd72039e939"
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "SQL_LOGS",
