@@ -712,7 +712,7 @@ $("searchForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   if (!empInput.value.trim() && !jobInput.value.trim() && !locInput.value.trim()) {
     $("resultsWrap").classList.add("show");
-    $("errorMsg").textContent = "Please enter at least one search term.";
+    $("errorMsg").textContent = "Please select employer, role or city.";
     $("errorBox").classList.remove("hidden");
     $("resultsBadge").textContent = "0 records";
     return;

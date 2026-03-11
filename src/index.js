@@ -77,19 +77,9 @@ export default {
 
       const cors = buildCorsHeaders(request);
 
-      // /api/compare-ai is POST-only; everything else is GET-only
+      // AI compare is disabled until Turnstile and all protections are in place
       if (url.pathname === "/api/compare-ai") {
-        if (request.method !== "POST") {
-          return jsonResponse({ error: "Method not allowed" }, 405, cors);
-        }
-        const ip = request.headers.get("cf-connecting-ip") || "unknown";
-        if (env.AI_RATE_LIMITER) {
-          const { success } = await env.AI_RATE_LIMITER.limit({ key: ip });
-          if (!success) {
-            return jsonResponse({ error: "AI limit reached (5/min). Please wait." }, 429, cors);
-          }
-        }
-        return handleCompareAI(request, env.DB, env.AI, cors);
+        return jsonResponse({ error: "Not found" }, 404, cors);
       }
 
       if (request.method !== "GET") {
