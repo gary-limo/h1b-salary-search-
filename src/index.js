@@ -75,7 +75,7 @@ export default {
         return handleSearch(url.searchParams, env.DB, cors, env, ctx);
       }
       if (url.pathname === "/api/suggest") {
-        return handleSuggest(url.searchParams, env.DB, cors);
+        return handleSuggest(url.searchParams, env.DB, cors, env, ctx);
       }
       if (url.pathname === "/api/record") {
         return handleRecord(url.searchParams, env.DB, cors);
@@ -99,6 +99,8 @@ export default {
 
 const CACHE_TTL_EDGE = 86400;
 const CACHE_TTL_KV   = 7776000;
+const CACHE_TTL_KV_SUGGEST = 2592000;
+const SUGGEST_KV_MAX_Q_LEN = 4;
 
 function buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize) {
   return `search:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
@@ -168,20 +170,16 @@ async function handleSearch(params, db, cors, env, ctx) {
   }
   if (location) {
     where.push("(worksite_city LIKE ? OR worksite_state LIKE ?)");
-    bindings.push(`%${location.toLowerCase()}%`, `%${location.toLowerCase()}%`);
+    bindings.push(`${location.toLowerCase()}%`, `${location.toLowerCase()}%`);
   }
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const countSQL = `SELECT COUNT(*) AS total FROM h1b_wages ${whereClause}`;
-  const dataSQL  = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
+  const dataSQL = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
 
   try {
-    const [countRow, rows] = await Promise.all([
-      db.prepare(countSQL).bind(...bindings).first(),
-      db.prepare(dataSQL).bind(...bindings).all(),
-    ]);
+    const rows = await db.prepare(dataSQL).bind(...bindings).all();
     const duration = Date.now() - t0;
-    const total = countRow?.total ?? 0;
+    const total = rows.results?.length ?? 0;
     const payload = { total, page, pageSize, results: rows.results };
     const response = jsonResponse(payload, 200, cors);
 
@@ -191,9 +189,9 @@ async function handleSearch(params, db, cors, env, ctx) {
         env.SEARCH_CACHE ? env.SEARCH_CACHE.put(kvKey, JSON.stringify(payload), { expirationTtl: CACHE_TTL_KV }) : Promise.resolve(),
         logSQL(env.SQL_LOGS, {
           route: "/api/search",
-          sql: resolveSQL(countSQL, bindings) + ";\n" + resolveSQL(dataSQL, bindings),
+          sql: resolveSQL(dataSQL, bindings),
           duration_ms: duration,
-          rows_returned: rows.results?.length ?? 0,
+          rows_returned: total,
         }),
         logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "d1", total_results: total, duration_ms: duration }),
       ]));
@@ -236,7 +234,11 @@ async function handleRecord(params, db, cors) {
   }
 }
 
-async function handleSuggest(params, db, cors) {
+function buildSuggestCacheKey(field, q, ctxEmp, ctxJob, ctxLoc) {
+  return `suggest:${field}:${q}:${ctxEmp}:${ctxJob}:${ctxLoc}`;
+}
+
+async function handleSuggest(params, db, cors, env, ctx) {
   const field    = params.get("field") || "";
   const q        = (params.get("q")        || "").trim().slice(0, MAX_INPUT_LENGTH);
   const ctxEmp   = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
@@ -254,6 +256,29 @@ async function handleSuggest(params, db, cors) {
   if (!hasContext && q.length < 2) {
     return jsonResponse({ results: [] }, 200, cors);
   }
+
+  const kvKey = buildSuggestCacheKey(field, q, ctxEmp, ctxJob, ctxLoc);
+  const cacheUrl = new Request(`https://cache.internal/${kvKey}`);
+  const useKV = q.length <= SUGGEST_KV_MAX_Q_LEN;
+
+  const t0 = Date.now();
+  try {
+    const edgeCached = await caches.default.match(cacheUrl);
+    if (edgeCached) return edgeCached;
+  } catch {}
+
+  try {
+    if (useKV && env.SEARCH_CACHE) {
+      const kvData = await env.SEARCH_CACHE.get(kvKey, { type: "json" });
+      if (kvData) {
+        const response = jsonResponse(kvData, 200, cors);
+        if (ctx) {
+          ctx.waitUntil(caches.default.put(cacheUrl, response.clone()).catch(() => {}));
+        }
+        return response;
+      }
+    }
+  } catch {}
 
   try {
     let stmt;
@@ -287,11 +312,11 @@ async function handleSuggest(params, db, cors) {
         ).bind(...ctxBindings);
       } else {
         stmt = db.prepare(
-          `SELECT value FROM (
-             SELECT DISTINCT ${col} AS value
-             FROM h1b_wages
-             WHERE ${ctxWhere.join(" AND ")} AND ${col} != ''
-           ) ORDER BY RANDOM() LIMIT 8`
+          `SELECT DISTINCT ${col} AS value
+           FROM h1b_wages
+           WHERE ${ctxWhere.join(" AND ")} AND ${col} != ''
+           ORDER BY ${col}
+           LIMIT 8`
         ).bind(...ctxBindings);
       }
     } else {
@@ -305,11 +330,18 @@ async function handleSuggest(params, db, cors) {
     }
 
     const { results } = await stmt.all();
-    return jsonResponse(
-      { results: results.map((r) => r.value).filter(Boolean) },
-      200,
-      cors
-    );
+    const payload = { results: results.map((r) => r.value).filter(Boolean) };
+    const response = jsonResponse(payload, 200, cors);
+
+    if (ctx) {
+      const bgTasks = [caches.default.put(cacheUrl, response.clone()).catch(() => {})];
+      if (useKV && env.SEARCH_CACHE) {
+        bgTasks.push(env.SEARCH_CACHE.put(kvKey, JSON.stringify(payload), { expirationTtl: CACHE_TTL_KV_SUGGEST }).catch(() => {}));
+      }
+      ctx.waitUntil(Promise.all(bgTasks));
+    }
+
+    return response;
   } catch (err) {
     console.error("Suggest error:", err);
     return jsonResponse({ error: "Suggestion lookup failed." }, 500, cors);
