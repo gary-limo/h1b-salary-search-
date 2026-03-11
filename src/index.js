@@ -5,8 +5,9 @@
  * that queries the D1 `h1b_wages` table.
  *
  * API routes:
- *   GET /api/search   – paginated full-text search
- *   GET /api/suggest  – autocomplete suggestions
+ *   GET  /api/search      – paginated full-text search
+ *   GET  /api/suggest     – autocomplete suggestions
+ *   POST /api/compare-ai  – AI-powered salary comparison (rate-limited)
  *
  * Cross-origin policy: API requests are only accepted when the Origin
  * or Referer header matches this Worker's own hostname (same-site enforcement).
@@ -17,7 +18,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const MAX_FETCH_SIZE    = 10000;
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
-const DEFAULT_COMPARE_ENABLED = false;
+const DEFAULT_COMPARE_ENABLED = true;
 
 // Columns that can be used in ORDER BY (whitelist to prevent SQL injection)
 const SORTABLE = new Set([
@@ -56,10 +57,8 @@ export default {
     }
 
     // Feature-gate compare so hidden pages are not directly reachable.
-    if (
-      !compareEnabled &&
-      (url.pathname === "/compare" || url.pathname === "/compare.html" || url.pathname === "/api/compare")
-    ) {
+    const COMPARE_PATHS = ["/compare", "/compare.html", "/api/compare", "/api/compare-ai"];
+    if (!compareEnabled && COMPARE_PATHS.includes(url.pathname)) {
       return jsonResponse({ error: "Not found" }, 404, {});
     }
 
@@ -75,20 +74,35 @@ export default {
           headers: buildCorsHeaders(request),
         });
       }
-      if (request.method !== "GET") {
-        return jsonResponse({ error: "Method not allowed" }, 405, buildCorsHeaders(request));
+
+      const cors = buildCorsHeaders(request);
+
+      // /api/compare-ai is POST-only; everything else is GET-only
+      if (url.pathname === "/api/compare-ai") {
+        if (request.method !== "POST") {
+          return jsonResponse({ error: "Method not allowed" }, 405, cors);
+        }
+        const ip = request.headers.get("cf-connecting-ip") || "unknown";
+        if (env.AI_RATE_LIMITER) {
+          const { success } = await env.AI_RATE_LIMITER.limit({ key: ip });
+          if (!success) {
+            return jsonResponse({ error: "AI limit reached (5/min). Please wait." }, 429, cors);
+          }
+        }
+        return handleCompareAI(request, env.DB, env.AI, cors);
       }
 
-      // Rate limit: 60 API requests per minute per IP
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "Method not allowed" }, 405, cors);
+      }
+
       const ip = request.headers.get("cf-connecting-ip") || "unknown";
       if (env.API_RATE_LIMITER) {
         const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
         if (!success) {
-          return jsonResponse({ error: "Too many requests. Please try again later." }, 429, buildCorsHeaders(request));
+          return jsonResponse({ error: "Too many requests. Please try again later." }, 429, cors);
         }
       }
-
-      const cors = buildCorsHeaders(request);
 
       if (url.pathname === "/api/search") {
         return handleSearch(url.searchParams, env.DB, cors);
@@ -353,6 +367,86 @@ async function handleCompare(params, db, cors) {
   }
 }
 
+const AI_MAX_EMPLOYERS = 4;
+const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const AI_MAX_TOKENS = 700;
+
+async function handleCompareAI(request, db, ai, cors) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Invalid JSON body." }, 400, cors);
+  }
+
+  const raw = Array.isArray(body?.employers) ? body.employers : [];
+  const employers = raw
+    .map(e => (typeof e === "string" ? e.trim() : ""))
+    .filter(Boolean)
+    .slice(0, AI_MAX_EMPLOYERS);
+
+  if (employers.length < 2) {
+    return jsonResponse({ error: "Provide 2–4 employer names." }, 400, cors);
+  }
+
+  try {
+    const placeholders = employers.map(() => "?").join(",");
+    const { results } = await db
+      .prepare(
+        `SELECT employer_name, std_career_level, ROUND(avg_wage, 0) AS avg_wage
+         FROM h1b_salary_summary
+         WHERE employer_name IN (${placeholders})
+         ORDER BY employer_name, std_career_level`
+      )
+      .bind(...employers)
+      .all();
+
+    if (!results || results.length === 0) {
+      return jsonResponse({ error: "No salary data found for those employers." }, 404, cors);
+    }
+
+    const dataBlock = results
+      .map(r => `${r.employer_name} | ${r.std_career_level} | $${r.avg_wage}`)
+      .join("\n");
+
+    const prompt = [
+      "Below is H-1B visa salary data (FY2025, US Dept of Labor) for selected employers.",
+      "Each row: Employer | Career Level | Average Annual Wage.",
+      "",
+      dataBlock,
+      "",
+      "In 3–5 short paragraphs:",
+      "1. Compare overall pay across these employers.",
+      "2. Highlight which employer pays most at entry vs senior levels.",
+      "3. Note any interesting gaps or patterns.",
+      "4. Keep it factual — use only the numbers above, do not invent data.",
+    ].join("\n");
+
+    const aiResult = await ai.run(AI_MODEL, {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a concise salary analyst. Use only the data provided. " +
+            "Format dollar amounts with commas. Do not use markdown headers."
+        },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: AI_MAX_TOKENS,
+      temperature: 0.2,
+    });
+
+    return jsonResponse(
+      { analysis: aiResult?.response ?? "", data: results },
+      200,
+      cors
+    );
+  } catch (err) {
+    console.error("Compare-AI error:", err);
+    return jsonResponse({ error: "AI comparison failed. Please try again." }, 500, cors);
+  }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function jsonResponse(body, status, extraHeaders) {
@@ -396,7 +490,7 @@ function buildCorsHeaders(request) {
   const origin = request.headers.get("Origin") || "";
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Vary": "Origin",
   };
