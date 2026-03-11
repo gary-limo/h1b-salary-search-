@@ -371,6 +371,7 @@ const AI_MAX_EMPLOYERS = 4;
 const AI_MAX_ROLES = 20;
 const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 const AI_MAX_TOKENS = 1024;
+const AI_MAX_HISTORY = 10;
 
 async function handleCompareAI(request, db, ai, cors) {
   let body;
@@ -390,10 +391,21 @@ async function handleCompareAI(request, db, ai, cors) {
     return jsonResponse({ error: "Provide 2–4 employer names." }, 400, cors);
   }
 
+  const userMessages = Array.isArray(body?.messages) ? body.messages : [];
+  const isChat = userMessages.length > 0;
+  const wantsStream = body?.stream === true;
+
   try {
     const placeholders = employers.map(() => "?").join(",");
-    const { results } = await db
-      .prepare(
+
+    const [summaryResult, rolesResult] = await Promise.all([
+      db.prepare(
+        `SELECT employer_name, ROUND(avg_wage, 0) AS avg_wage, std_career_level
+         FROM h1b_salary_summary
+         WHERE employer_name IN (${placeholders})
+         ORDER BY employer_name, std_career_level`
+      ).bind(...employers).all(),
+      db.prepare(
         `SELECT employer_name, job_title, ROUND(AVG(wage_rate_of_pay_from), 0) AS avg_wage,
                 COUNT(*) AS filings
          FROM h1b_wages
@@ -401,58 +413,73 @@ async function handleCompareAI(request, db, ai, cors) {
          GROUP BY employer_name, job_title
          ORDER BY employer_name, avg_wage DESC
          LIMIT ${AI_MAX_ROLES}`
-      )
-      .bind(...employers)
-      .all();
+      ).bind(...employers).all(),
+    ]);
 
-    if (!results || results.length === 0) {
+    const summaryData = summaryResult?.results || [];
+    const rolesData = rolesResult?.results || [];
+
+    if (rolesData.length === 0) {
       return jsonResponse({ error: "No salary data found for those employers." }, 404, cors);
     }
 
-    const dataBlock = results
+    const dataBlock = rolesData
       .map(r => `${r.employer_name} | ${r.job_title} | $${r.avg_wage} | ${r.filings} filings`)
       .join("\n");
 
-    const prompt = [
-      "Below is H-1B visa salary data (US Dept of Labor) for selected employers.",
-      "Each row: Employer | Job Title | Average Annual Wage | Number of H1B filings.",
+    const systemMsg = [
+      "You are a friendly, knowledgeable H-1B salary analyst. You have the following real salary data ",
+      "(US Dept of Labor, FY2025). Each row: Employer | Job Title | Avg Annual Wage | Filings.",
       "",
       dataBlock,
       "",
-      "Different companies use different job titles for similar work.",
-      "Please analyze this data as follows:",
-      "",
-      "1. For each employer, briefly describe what their top roles do (1-2 sentences per role).",
-      "2. Identify common/equivalent roles across these employers (e.g. 'Software Engineer' at one company may be similar to 'Software Development Engineer' at another).",
-      "3. Compare pay for these equivalent roles — which employer pays more for similar work?",
-      "4. Highlight any unique or specialized roles that only appear at one employer.",
-      "5. Summarize the overall compensation picture — who pays best and for what kind of work?",
-      "",
-      "Keep it factual. Use only the data above. Format dollar amounts with commas.",
+      "Rules:",
+      "- Answer questions about this data conversationally and concisely.",
+      "- Explain what roles do, find equivalent roles across employers, compare pay.",
+      "- Use only the data above. Do not invent numbers.",
+      "- Format dollar amounts with commas (e.g. $120,000).",
+      "- Keep responses short (2-4 paragraphs max) unless user asks for detail.",
+      "- Be engaging and helpful, like a smart colleague explaining salary data.",
     ].join("\n");
 
+    const messages = [{ role: "system", content: systemMsg }];
+
+    if (isChat) {
+      const history = userMessages.slice(-AI_MAX_HISTORY);
+      for (const m of history) {
+        const role = m.role === "assistant" ? "assistant" : "user";
+        const content = String(m.content || "").slice(0, 500);
+        if (content) messages.push({ role, content });
+      }
+    } else {
+      messages.push({
+        role: "user",
+        content: "Give me a quick, engaging overview of how these employers compare on H-1B salaries. " +
+          "What roles do they hire for, and who pays best?"
+      });
+    }
+
+    if (wantsStream) {
+      const stream = await ai.run(AI_MODEL, {
+        messages,
+        max_tokens: AI_MAX_TOKENS,
+        temperature: 0.5,
+        stream: true,
+      });
+      return new Response(stream, {
+        headers: { "content-type": "text/event-stream", ...cors },
+      });
+    }
+
     const aiResult = await ai.run(AI_MODEL, {
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert H-1B salary analyst who understands job roles across tech, " +
-            "consulting, finance, and other industries. Your job is to help users compare " +
-            "employers by explaining what each role does, finding equivalent roles across " +
-            "companies, and comparing pay fairly. Be concise and clear. " +
-            "Do not use markdown headers or bullet symbols. Use plain paragraphs."
-        },
-        { role: "user", content: prompt },
-      ],
+      messages,
       max_tokens: AI_MAX_TOKENS,
-      temperature: 0.3,
+      temperature: 0.5,
     });
 
-    return jsonResponse(
-      { analysis: aiResult?.response ?? "", data: results },
-      200,
-      cors
-    );
+    const response = { analysis: aiResult?.response ?? "", data: summaryData };
+    if (!isChat) response.data = summaryData;
+    return jsonResponse(response, 200, cors);
   } catch (err) {
     console.error("Compare-AI error:", err);
     return jsonResponse({ error: "AI comparison failed. Please try again." }, 500, cors);
