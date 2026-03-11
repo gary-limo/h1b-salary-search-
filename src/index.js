@@ -17,6 +17,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const MAX_FETCH_SIZE    = 10000;
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
+const DEFAULT_COMPARE_ENABLED = false;
 
 // Columns that can be used in ORDER BY (whitelist to prevent SQL injection)
 const SORTABLE = new Set([
@@ -42,6 +43,7 @@ const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const compareEnabled = isCompareEnabled(env);
     const staticRouteMap = {
       "/": "/index.html",
       "/compare": "/compare.html",
@@ -51,6 +53,14 @@ export default {
     // Block server-side files from being served as static assets
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p))) {
       return new Response("Not Found", { status: 404 });
+    }
+
+    // Feature-gate compare so hidden pages are not directly reachable.
+    if (
+      !compareEnabled &&
+      (url.pathname === "/compare" || url.pathname === "/compare.html" || url.pathname === "/api/compare")
+    ) {
+      return jsonResponse({ error: "Not found" }, 404, {});
     }
 
     // Delegate API requests to handlers (including CORS preflight)
@@ -390,4 +400,10 @@ function buildCorsHeaders(request) {
     "Access-Control-Allow-Headers": "Content-Type",
     "Vary": "Origin",
   };
+}
+
+function isCompareEnabled(env) {
+  const raw = env?.COMPARE_ENABLED;
+  if (raw == null) return DEFAULT_COMPARE_ENABLED;
+  return String(raw).toLowerCase() === "true";
 }
