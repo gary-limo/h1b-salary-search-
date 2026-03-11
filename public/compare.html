@@ -146,6 +146,10 @@ td.empty-cell{color:#C0C7CF;font-style:italic;font-size:12px}
 .chat-send:hover{background:#243560}
 .chat-send:disabled{opacity:.4;cursor:not-allowed}
 .chat-hint{font-size:11px;color:#8896A6;text-align:center;padding:0 18px 10px}
+.chat-starters{display:flex;flex-direction:column;gap:8px;padding:8px 0}
+.chat-starters-label{font-size:12px;color:#8896A6;margin-bottom:2px}
+.chat-starter-btn{display:block;width:100%;text-align:left;padding:10px 14px;background:#F8F6F3;border:1px solid #E2DDD6;border-radius:10px;font-size:13px;color:#1B2A4A;cursor:pointer;transition:all .15s;font-family:inherit;line-height:1.4}
+.chat-starter-btn:hover{background:#EDE9E3;border-color:#B8A062;color:#1B2A4A}
 
 .disclaimer{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(184,160,98,.06);border:1px solid rgba(184,160,98,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#000;line-height:1.5;text-align:center;margin-top:24px}
 .disclaimer strong{color:#000}
@@ -220,7 +224,7 @@ td.empty-cell{color:#C0C7CF;font-style:italic;font-size:12px}
     <div class="chat-box" id="chatBox">
       <div class="chat-hdr">
         <div class="section-bar"></div>
-        <div class="section-title">Salary Chat</div>
+        <div class="section-title">QnA</div>
         <span class="ai-badge">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Live
@@ -641,6 +645,52 @@ function streamChat(messages) {
 
 // ─── Compare ──────────────────────────────────────────────────────────────────
 
+function getStarterQuestions() {
+  var names = selectedEmployers.slice(0, 3).map(function(n) {
+    return n.split(/\s+/).slice(0, 2).join(" ");
+  });
+  return [
+    "Who pays the most for similar roles across these companies?",
+    "What are the common job titles between " + names[0] + " and " + names[1] + "?",
+    "Which company has the most unique or specialized roles?",
+    "Compare entry-level vs senior pay across all employers"
+  ];
+}
+
+function showStarterQuestions() {
+  var container = $("chatMessages");
+  var questions = getStarterQuestions();
+
+  var welcomeDiv = document.createElement("div");
+  welcomeDiv.className = "chat-msg ai";
+  welcomeDiv.innerHTML =
+    '<div class="chat-avatar">AI</div>' +
+    '<div class="chat-bubble">I\'ve loaded the salary data for these employers. Ask me anything, or pick a question below to get started!</div>';
+  container.appendChild(welcomeDiv);
+
+  var startersDiv = document.createElement("div");
+  startersDiv.className = "chat-starters";
+  startersDiv.id = "chatStarters";
+  for (var i = 0; i < questions.length; i++) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chat-starter-btn";
+    btn.textContent = questions[i];
+    (function(q) {
+      btn.addEventListener("click", function() {
+        var el = $("chatStarters");
+        if (el) el.remove();
+        chatHistory.push({ role: "user", content: q });
+        appendChatMsg("user", q);
+        streamChat(chatHistory);
+      });
+    })(questions[i]);
+    startersDiv.appendChild(btn);
+  }
+  container.appendChild(startersDiv);
+  container.scrollTop = container.scrollHeight;
+}
+
 function runCompare() {
   if (selectedEmployers.length < 2) return;
 
@@ -652,11 +702,7 @@ function runCompare() {
   chatHistory = [];
   $("chatMessages").innerHTML = "";
 
-  fetch("/api/compare-ai", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ employers: selectedEmployers })
-  })
+  fetch("/api/compare?employers=" + encodeURIComponent(selectedEmployers.join("||")))
   .then(function(res) { return res.json().then(function(j) { return { status: res.status, json: j }; }); })
   .then(function(resp) {
     $("compareBtn").disabled = false;
@@ -671,16 +717,12 @@ function runCompare() {
       return;
     }
 
-    var data = resp.json.data || [];
+    var data = resp.json.results || [];
     if (data.length > 0) {
       renderDashboard(data);
     }
 
-    var analysis = resp.json.analysis || "";
-    if (analysis) {
-      chatHistory.push({ role: "assistant", content: analysis });
-      appendChatMsg("ai", analysis);
-    }
+    showStarterQuestions();
     setChatEnabled(true);
   })
   .catch(function(err) {
@@ -694,6 +736,9 @@ function sendChatMessage() {
   var input = $("chatInput");
   var text = input.value.trim();
   if (!text || chatStreaming || selectedEmployers.length < 2) return;
+
+  var starters = $("chatStarters");
+  if (starters) starters.remove();
 
   input.value = "";
   chatHistory.push({ role: "user", content: text });
