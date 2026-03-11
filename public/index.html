@@ -90,7 +90,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:300;background:#fff;border-radius:10px;border:1px solid #E2DDD6;box-shadow:0 8px 24px rgba(27,42,74,.12);display:none;max-height:240px;overflow-y:auto}
 .dropdown.open{display:block}
 .dropdown-item{padding:8px 14px;font-size:13px;color:#1B2A4A;cursor:pointer;transition:background .1s}
-.dropdown-item:hover{background:rgba(184,160,98,.08)}
+.dropdown-item:hover,.dropdown-item.ac-highlighted{background:rgba(184,160,98,.08)}
 .dropdown-item+.dropdown-item{border-top:1px solid #F0ECE8}
 .dropdown-loading{padding:10px 14px;font-size:12px;color:#9CA3AF;display:flex;align-items:center;gap:6px}
 
@@ -252,6 +252,7 @@ th.th-filterable{position:relative}
             </div>
             <input class="field-input" id="empInput" type="text" placeholder="Employer (e.g. Intel)" aria-label="Employer" autocomplete="off">
           </div>
+          <div class="dropdown" id="empDropdown"></div>
         </div>
         <div class="field-wrap">
           <div class="field-inner" id="jobFieldInner">
@@ -260,6 +261,7 @@ th.th-filterable{position:relative}
             </div>
             <input class="field-input" id="jobInput" type="text" placeholder="Job title" aria-label="Job title" autocomplete="off">
           </div>
+          <div class="dropdown" id="jobDropdown"></div>
         </div>
         <div class="field-wrap">
           <div class="field-inner" id="locFieldInner">
@@ -268,6 +270,7 @@ th.th-filterable{position:relative}
             </div>
             <input class="field-input" id="locInput" type="text" placeholder="Location (e.g. Seattle)" aria-label="Location" autocomplete="off">
           </div>
+          <div class="dropdown" id="locDropdown"></div>
         </div>
       </div>
       <div class="btn-row">
@@ -328,17 +331,17 @@ const PAGE_SIZE_OPTIONS = [15, 25, 50, 75];
 const MAX_FETCH_SIZE    = 10000;
 
 const POPULAR = [
-  { label: "Google",            employer: "Google",           job: "",                  loc: "" },
-  { label: "Amazon",            employer: "Amazon",           job: "",                  loc: "" },
-  { label: "Microsoft",         employer: "Microsoft",        job: "",                  loc: "" },
-  { label: "Meta",              employer: "Meta",             job: "",                  loc: "" },
-  { label: "Apple",             employer: "Apple Inc",            job: "",                  loc: "" },
-  { label: "Accenture",         employer: "Accenture",        job: "",                  loc: "" },
-  { label: "Data Scientist",    employer: "",                 job: "Data Scientist",     loc: "" },
-  { label: "Software Engineer", employer: "",                 job: "Software Engineer",  loc: "" },
-  { label: "San Francisco",     employer: "",                 job: "",                  loc: "San Francisco" },
-  { label: "Seattle",           employer: "",                 job: "",                  loc: "Seattle" },
-  { label: "New York",          employer: "",                 job: "",                  loc: "New York" },
+  { label: "Google",            employer: "Google LLC",               job: "",                  loc: "" },
+  { label: "Amazon",            employer: "Amazon.com Services LLC",  job: "",                  loc: "" },
+  { label: "Microsoft",         employer: "Microsoft Corporation",    job: "",                  loc: "" },
+  { label: "Meta Platforms",    employer: "Meta Platforms Inc",       job: "",                  loc: "" },
+  { label: "Apple",             employer: "Apple Inc",                job: "",                  loc: "" },
+  { label: "Accenture",         employer: "Accenture LLP",            job: "",                  loc: "" },
+  { label: "Data Scientist",    employer: "",                         job: "data scientist",    loc: "" },
+  { label: "Software Engineer", employer: "",                         job: "software engineer", loc: "" },
+  { label: "San Francisco",     employer: "",                         job: "",                  loc: "san francisco" },
+  { label: "Seattle",           employer: "",                         job: "",                  loc: "seattle" },
+  { label: "New York",          employer: "",                         job: "",                  loc: "new york" },
 ];
 
 const SORT_COLS = [
@@ -411,7 +414,8 @@ async function ensureCacheLoaded(emp, job, loc) {
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 function fmtUSD(v) { return v == null ? "\u2014" : usd.format(v); }
 function fmtLoc(r) {
-  const parts = [r.worksite_city, r.worksite_state].filter(Boolean);
+  const city = r.worksite_city ? toTitleCase(r.worksite_city) : null;
+  const parts = [city, r.worksite_state].filter(Boolean);
   return parts.join(", ") || "\u2014";
 }
 function html(s) {
@@ -419,6 +423,10 @@ function html(s) {
   const d = document.createElement("div");
   d.textContent = String(s);
   return d.innerHTML;
+}
+function toTitleCase(s) {
+  if (!s) return s;
+  return s.replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // ─── Render ──────────────────────────────────────────────────────────────────
@@ -429,7 +437,7 @@ function renderTable(records, isFilterEmpty) {
   const rows = recs.length
     ? recs.map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
     <td class="emp"><a href="/record?id=${html(r.id)}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a></td>
-    <td class="job">${html(r.job_title)}</td>
+    <td class="job">${html(toTitleCase(r.job_title))}</td>
     <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
     <td class="loc">${html(fmtLoc(r))}</td>
     <td class="date">${html(r.begin_date)}</td>
@@ -439,7 +447,7 @@ function renderTable(records, isFilterEmpty) {
 
   const cards = recs.length ? recs.map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
     <a href="/record?id=${html(r.id)}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a>
-    <div class="rc-job">${html(r.job_title)}</div>
+    <div class="rc-job">${html(toTitleCase(r.job_title))}</div>
     <div class="rc-grid">
       <div><div class="rc-label">Base Salary</div><div class="rc-val money">${fmtUSD(r.wage_rate_of_pay_from)}</div></div>
       <div><div class="rc-label">Location</div><div class="rc-val">${html(fmtLoc(r))}</div></div>
@@ -754,13 +762,151 @@ POPULAR.forEach(item => {
   btn.type      = "button";
   btn.textContent = item.label;
   btn.addEventListener("click", () => {
+    // Store exact DB values for context-aware suggest
+    selEmp = item.employer;
+    selJob = item.job;
+    selLoc = item.loc || "";
+    // Display: employer keeps its own casing; job/loc are lowercase in DB so title-case for aesthetics
     empInput.value = item.employer;
-    jobInput.value = item.job;
-    locInput.value = item.loc || "";
+    jobInput.value = toTitleCase(item.job);
+    locInput.value = toTitleCase(item.loc || "");
     updateClearBtn();
     executeSearch();
   });
   popularContainer.appendChild(btn);
+});
+
+// ─── Autocomplete ─────────────────────────────────────────────────────────────
+// selEmp/selJob/selLoc hold the exact DB value the user last selected from a
+// dropdown. They are passed as context when suggesting for the other fields,
+// ensuring only valid combinations are shown (e.g. only jobs at Accenture).
+
+let selEmp = "", selJob = "", selLoc = "";
+const acTimers = {};
+
+function acGetContext(field) {
+  const ctx = {};
+  if (field !== "employer" && selEmp) ctx.employer = selEmp;
+  if (field !== "job"      && selJob) ctx.job      = selJob;
+  if (field !== "location" && selLoc) ctx.location  = selLoc;
+  return ctx;
+}
+
+function acCloseAll() {
+  ["empDropdown", "jobDropdown", "locDropdown"].forEach(id => {
+    const dd = $(id);
+    if (dd) { dd.className = "dropdown"; dd.innerHTML = ""; }
+  });
+}
+
+function acSetup(input, dropdownId, field) {
+  const dd = $(dropdownId);
+  let highlighted = -1;
+
+  function closeDD() {
+    dd.className = "dropdown";
+    dd.innerHTML = "";
+    highlighted = -1;
+  }
+
+  function renderItems(items) {
+    if (!items || items.length === 0) { closeDD(); return; }
+    dd.innerHTML = items.map(v =>
+      `<div class="dropdown-item" data-val="${v.replace(/&/g,"&amp;").replace(/"/g,"&quot;")}">${html(toTitleCase(v))}</div>`
+    ).join("");
+    dd.className = "dropdown open";
+    highlighted = -1;
+    dd.querySelectorAll(".dropdown-item").forEach(item => {
+      item.addEventListener("mousedown", e => {
+        e.preventDefault();
+        const val = item.getAttribute("data-val");
+        // Store raw (lowercase) value for API context; display title-cased for aesthetics
+        if (field === "employer") { selEmp = val; input.value = val; }
+        else if (field === "job") { selJob = val; input.value = toTitleCase(val); }
+        else { selLoc = val; input.value = toTitleCase(val); }
+        updateClearBtn();
+        closeDD();
+      });
+    });
+  }
+
+  function highlight(idx) {
+    const items = dd.querySelectorAll(".dropdown-item");
+    if (!items.length) return;
+    highlighted = ((idx % items.length) + items.length) % items.length;
+    items.forEach((it, i) => it.classList.toggle("ac-highlighted", i === highlighted));
+    items[highlighted]?.scrollIntoView({ block: "nearest" });
+  }
+
+  async function fetchSuggest(q) {
+    const ctx = acGetContext(field);
+    const hasCtx = Object.keys(ctx).length > 0;
+    // With no context require 2+ chars; with context allow empty q (random hints)
+    if (!hasCtx && q.length < 2) { closeDD(); return; }
+    dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
+    dd.className = "dropdown open";
+    clearTimeout(acTimers[field]);
+    acTimers[field] = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ field, q, ...ctx });
+        const res  = await fetch(`/api/suggest?${params}`);
+        const data = await res.json();
+        renderItems(data.results || []);
+      } catch { closeDD(); }
+    }, q.length === 0 ? 0 : 250);
+  }
+
+  input.addEventListener("input", () => {
+    // User is typing freely — clear the stored exact selection for this field
+    if (field === "employer") selEmp = "";
+    else if (field === "job") selJob = "";
+    else selLoc = "";
+
+    const q = input.value.trim();
+    clearTimeout(acTimers[field]);
+    fetchSuggest(q);
+  });
+
+  // On focus: if other fields have selections, show random hints immediately
+  input.addEventListener("focus", () => {
+    const ctx = acGetContext(field);
+    if (Object.keys(ctx).length > 0 && !dd.classList.contains("open")) {
+      fetchSuggest(input.value.trim());
+    }
+  });
+
+  input.addEventListener("keydown", e => {
+    const items = dd.querySelectorAll(".dropdown-item");
+    if (e.key === "ArrowDown") { e.preventDefault(); highlight(highlighted + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); highlight(highlighted - 1); }
+    else if (e.key === "Enter" && highlighted >= 0 && items[highlighted]) {
+      e.preventDefault();
+      const val = items[highlighted].getAttribute("data-val");
+      if (field === "employer") { selEmp = val; input.value = val; }
+      else if (field === "job") { selJob = val; input.value = toTitleCase(val); }
+      else { selLoc = val; input.value = toTitleCase(val); }
+      updateClearBtn();
+      closeDD();
+    } else if (e.key === "Escape") { closeDD(); }
+  });
+
+  input.addEventListener("blur", () => setTimeout(closeDD, 150));
+}
+
+acSetup(empInput, "empDropdown", "employer");
+acSetup(jobInput, "jobDropdown", "job");
+acSetup(locInput, "locDropdown", "location");
+
+// Clear exact selections when the clear button resets the fields
+const origClearClick = $("clearBtn").onclick;
+$("clearBtn").addEventListener("click", () => {
+  selEmp = ""; selJob = ""; selLoc = "";
+  acCloseAll();
+});
+
+// Close all autocomplete dropdowns on outside click
+document.addEventListener("click", e => {
+  if (!e.target.closest(".field-wrap")) acCloseAll();
 });
 </script>
 </body>

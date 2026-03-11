@@ -19,12 +19,4 @@ SET employer_name = trim(employer_name),
 WHERE employer_name != trim(employer_name)
    OR job_title != trim(job_title);
 
--- Wage data errors: 8-digit values (e.g. 21300000 instead of 213000) -> set to 0.01 to exclude from aggregates
-UPDATE h1b_wages
-SET wage_rate_of_pay_from = 0.01
-WHERE wage_rate_of_pay_from >= 10000000 AND wage_rate_of_pay_from < 100000000;
-
--- 7-digit values (e.g. 1200000 instead of 120000) -> multiply by 0.1 to correct
-UPDATE h1b_wages
-SET wage_rate_of_pay_from = wage_rate_of_pay_from * 0.1
-WHERE wage_rate_of_pay_from >= 1000000 AND wage_rate_of_pay_from < 10000000;
+-- Next: run 0001c1_job_title_cleanup.sql (job title mappings), then 0001c2_data_quality_part2.sql (lowercase + wage fixes)

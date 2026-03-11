@@ -32,9 +32,11 @@ npx wrangler d1 execute "$DB_NAME" --local --file=./h1b_wages_export.sql
 echo ""
 echo "Step 3/6: Running data quality checks..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c_data_quality.sql
+npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c1_job_title_cleanup.sql
+npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c2_data_quality_part2.sql
 
 echo ""
-echo "Step 4/6: Creating FTS index..."
+echo "Step 4/6: Creating suggest tables..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001b_create_fts.sql
 
 echo ""

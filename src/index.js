@@ -29,11 +29,11 @@ const SORTABLE = new Set([
   "end_date",
 ]);
 
-// Suggestion field mapping (URL param → DB column)
+// Suggestion field mapping (URL param → DB column + dedicated suggest table)
 const SUGGEST_FIELDS = {
-  employer: "employer_name",
-  job: "job_title",
-  location: "worksite_city",
+  employer:  { col: "employer_name", table: "h1b_suggest_employers" },
+  job:       { col: "job_title",     table: "h1b_suggest_jobs"      },
+  location:  { col: "worksite_city", table: "h1b_suggest_locations" },
 };
 
 // Block direct access to server-side source files
@@ -133,16 +133,16 @@ async function handleSearch(params, db, cors) {
   const bindings = [];
 
   if (employer) {
-    // Prefix match only - enables index use on employer_name (users typically type start of name)
-    where.push("w.employer_name LIKE ?");
+    // Prefix match — uses idx_h1b_employer (B-tree range scan)
+    where.push("employer_name LIKE ?");
     bindings.push(`${employer.toLowerCase()}%`);
   }
   if (job) {
-    where.push("f.job_title LIKE ?");
+    where.push("job_title LIKE ?");
     bindings.push(`%${job.toLowerCase()}%`);
   }
   if (location) {
-    where.push("(f.worksite_city LIKE ? OR f.worksite_state LIKE ?)");
+    where.push("(worksite_city LIKE ? OR worksite_state LIKE ?)");
     bindings.push(`%${location.toLowerCase()}%`, `%${location.toLowerCase()}%`);
   }
 
@@ -153,22 +153,20 @@ async function handleSearch(params, db, cors) {
       db
         .prepare(
           `SELECT COUNT(*) AS total
-           FROM h1b_wages_fts f
-           JOIN h1b_wages w ON w.id = f.rowid
+           FROM h1b_wages
            ${whereClause}`
         )
         .bind(...bindings)
         .first(),
       db
         .prepare(
-          `SELECT w.id, w.employer_name, w.job_title,
-                  w.wage_rate_of_pay_from,
-                  w.worksite_city, w.worksite_state,
-                  w.begin_date, w.end_date
-           FROM h1b_wages_fts f
-           JOIN h1b_wages w ON w.id = f.rowid
+          `SELECT id, employer_name, job_title,
+                  wage_rate_of_pay_from,
+                  worksite_city, worksite_state,
+                  begin_date, end_date
+           FROM h1b_wages
            ${whereClause}
-           ORDER BY w.${sort} ${dir} NULLS LAST
+           ORDER BY ${sort} ${dir} NULLS LAST
            LIMIT ${pageSize} OFFSET ${offset}`
         )
         .bind(...bindings)
@@ -222,26 +220,82 @@ async function handleRecord(params, db, cors) {
 }
 
 async function handleSuggest(params, db, cors) {
-  const field = params.get("field") || "";
-  const q = (params.get("q") || "").trim().slice(0, MAX_INPUT_LENGTH);
-  const col = SUGGEST_FIELDS[field];
+  const field    = params.get("field") || "";
+  const q        = (params.get("q")        || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const ctxEmp   = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const ctxJob   = (params.get("job")      || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const ctxLoc   = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const cfg      = SUGGEST_FIELDS[field];
 
-  if (!col || q.length < 2) {
+  if (!cfg) return jsonResponse({ results: [] }, 200, cors);
+
+  const { col, table } = cfg;
+  const hasContext = (field !== "employer" && ctxEmp) ||
+                     (field !== "job"      && ctxJob) ||
+                     (field !== "location" && ctxLoc);
+
+  // Require at least 2 chars unless context is set (then show hints on focus too)
+  if (!hasContext && q.length < 2) {
     return jsonResponse({ results: [] }, 200, cors);
   }
 
   try {
-    const { results } = await db
-      .prepare(
-        `SELECT DISTINCT ${col} AS value
-         FROM h1b_wages
+    let stmt;
+
+    if (hasContext) {
+      // Context-aware path: anchor on the exact selected value (composite index seek),
+      // use LIKE '%q%' (contains) for flexibility. When q is empty (focus trigger),
+      // return random samples so user sees what's available without typing.
+      const ctxWhere    = [];
+      const ctxBindings = [];
+
+      if (field !== "employer" && ctxEmp) {
+        ctxWhere.push("employer_name = ?");
+        ctxBindings.push(ctxEmp);
+      }
+      if (field !== "job" && ctxJob) {
+        ctxWhere.push("job_title = ?");
+        ctxBindings.push(ctxJob);
+      }
+      if (field !== "location" && ctxLoc) {
+        ctxWhere.push("(worksite_city = ? OR worksite_state = ?)");
+        ctxBindings.push(ctxLoc, ctxLoc);
+      }
+
+      if (q.length >= 2) {
+        // Contains match — user is actively typing; composite index handles the context filter
+        ctxWhere.push(`${col} LIKE ?`);
+        ctxBindings.push(`%${q}%`);
+        stmt = db.prepare(
+          `SELECT DISTINCT ${col} AS value
+           FROM h1b_wages
+           WHERE ${ctxWhere.join(" AND ")} AND ${col} != ''
+           ORDER BY ${col}
+           LIMIT 8`
+        ).bind(...ctxBindings);
+      } else {
+        // No query yet (focus trigger): return random samples scoped to context
+        // so user gets a preview of what exists without typing anything
+        stmt = db.prepare(
+          `SELECT value FROM (
+             SELECT DISTINCT ${col} AS value
+             FROM h1b_wages
+             WHERE ${ctxWhere.join(" AND ")} AND ${col} != ''
+           ) ORDER BY RANDOM() LIMIT 8`
+        ).bind(...ctxBindings);
+      }
+    } else {
+      // No context: fast prefix scan on the small suggest table (index range scan)
+      stmt = db.prepare(
+        `SELECT ${col} AS value
+         FROM ${table}
          WHERE ${col} LIKE ?
          ORDER BY ${col}
          LIMIT 8`
-      )
-      .bind(`${q.toLowerCase()}%`)
-      .all();
+      ).bind(`${q}%`);
+    }
 
+    const { results } = await stmt.all();
     return jsonResponse(
       { results: results.map((r) => r.value).filter(Boolean) },
       200,
@@ -259,7 +313,7 @@ async function handleCompare(params, db, cors) {
     return jsonResponse({ error: "Provide at least one employer." }, 400, cors);
   }
 
-  const employers = raw.split("||").map(e => e.trim()).filter(Boolean).slice(0, 5);
+  const employers = raw.split("||").map(e => e.trim()).filter(Boolean).slice(0, 4);
   if (employers.length === 0) {
     return jsonResponse({ error: "Provide at least one employer." }, 400, cors);
   }
