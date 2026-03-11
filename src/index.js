@@ -368,8 +368,9 @@ async function handleCompare(params, db, cors) {
 }
 
 const AI_MAX_EMPLOYERS = 4;
+const AI_MAX_ROLES = 20;
 const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
-const AI_MAX_TOKENS = 700;
+const AI_MAX_TOKENS = 1024;
 
 async function handleCompareAI(request, db, ai, cors) {
   let body;
@@ -393,10 +394,13 @@ async function handleCompareAI(request, db, ai, cors) {
     const placeholders = employers.map(() => "?").join(",");
     const { results } = await db
       .prepare(
-        `SELECT employer_name, std_career_level, ROUND(avg_wage, 0) AS avg_wage
-         FROM h1b_salary_summary
+        `SELECT employer_name, job_title, ROUND(AVG(wage_rate_of_pay_from), 0) AS avg_wage,
+                COUNT(*) AS filings
+         FROM h1b_wages
          WHERE employer_name IN (${placeholders})
-         ORDER BY employer_name, std_career_level`
+         GROUP BY employer_name, job_title
+         ORDER BY employer_name, avg_wage DESC
+         LIMIT ${AI_MAX_ROLES}`
       )
       .bind(...employers)
       .all();
@@ -406,20 +410,25 @@ async function handleCompareAI(request, db, ai, cors) {
     }
 
     const dataBlock = results
-      .map(r => `${r.employer_name} | ${r.std_career_level} | $${r.avg_wage}`)
+      .map(r => `${r.employer_name} | ${r.job_title} | $${r.avg_wage} | ${r.filings} filings`)
       .join("\n");
 
     const prompt = [
-      "Below is H-1B visa salary data (FY2025, US Dept of Labor) for selected employers.",
-      "Each row: Employer | Career Level | Average Annual Wage.",
+      "Below is H-1B visa salary data (US Dept of Labor) for selected employers.",
+      "Each row: Employer | Job Title | Average Annual Wage | Number of H1B filings.",
       "",
       dataBlock,
       "",
-      "In 3–5 short paragraphs:",
-      "1. Compare overall pay across these employers.",
-      "2. Highlight which employer pays most at entry vs senior levels.",
-      "3. Note any interesting gaps or patterns.",
-      "4. Keep it factual — use only the numbers above, do not invent data.",
+      "Different companies use different job titles for similar work.",
+      "Please analyze this data as follows:",
+      "",
+      "1. For each employer, briefly describe what their top roles do (1-2 sentences per role).",
+      "2. Identify common/equivalent roles across these employers (e.g. 'Software Engineer' at one company may be similar to 'Software Development Engineer' at another).",
+      "3. Compare pay for these equivalent roles — which employer pays more for similar work?",
+      "4. Highlight any unique or specialized roles that only appear at one employer.",
+      "5. Summarize the overall compensation picture — who pays best and for what kind of work?",
+      "",
+      "Keep it factual. Use only the data above. Format dollar amounts with commas.",
     ].join("\n");
 
     const aiResult = await ai.run(AI_MODEL, {
@@ -427,13 +436,16 @@ async function handleCompareAI(request, db, ai, cors) {
         {
           role: "system",
           content:
-            "You are a concise salary analyst. Use only the data provided. " +
-            "Format dollar amounts with commas. Do not use markdown headers."
+            "You are an expert H-1B salary analyst who understands job roles across tech, " +
+            "consulting, finance, and other industries. Your job is to help users compare " +
+            "employers by explaining what each role does, finding equivalent roles across " +
+            "companies, and comparing pay fairly. Be concise and clear. " +
+            "Do not use markdown headers or bullet symbols. Use plain paragraphs."
         },
         { role: "user", content: prompt },
       ],
       max_tokens: AI_MAX_TOKENS,
-      temperature: 0.2,
+      temperature: 0.3,
     });
 
     return jsonResponse(
