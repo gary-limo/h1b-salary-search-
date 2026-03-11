@@ -1,26 +1,9 @@
-/**
- * H1B Salary Search – Cloudflare Worker
- *
- * Serves the static frontend (via env.ASSETS) and a read-only JSON API
- * that queries the D1 `h1b_wages` table.
- *
- * API routes:
- *   GET  /api/search      – paginated full-text search
- *   GET  /api/suggest     – autocomplete suggestions
- *   POST /api/compare-ai  – AI-powered salary comparison (rate-limited)
- *
- * Cross-origin policy: API requests are only accepted when the Origin
- * or Referer header matches this Worker's own hostname (same-site enforcement).
- * Requests with no matching header are rejected (403).
- */
-
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_FETCH_SIZE    = 10000;
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
 const DEFAULT_COMPARE_ENABLED = false;
 
-// Columns that can be used in ORDER BY (whitelist to prevent SQL injection)
 const SORTABLE = new Set([
   "employer_name",
   "job_title",
@@ -31,14 +14,12 @@ const SORTABLE = new Set([
   "end_date",
 ]);
 
-// Suggestion field mapping (URL param → DB column + dedicated suggest table)
 const SUGGEST_FIELDS = {
   employer:  { col: "employer_name", table: "h1b_suggest_employers" },
   job:       { col: "job_title",     table: "h1b_suggest_jobs"      },
   location:  { col: "worksite_city", table: "h1b_suggest_locations" },
 };
 
-// Block direct access to server-side source files
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 
 export default {
@@ -51,18 +32,15 @@ export default {
       "/record": "/record.html",
     };
 
-    // Block server-side files from being served as static assets
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p))) {
       return new Response("Not Found", { status: 404 });
     }
 
-    // Feature-gate compare so hidden pages are not directly reachable.
     const COMPARE_PATHS = ["/compare", "/compare.html", "/api/compare", "/api/compare-ai"];
     if (!compareEnabled && COMPARE_PATHS.includes(url.pathname)) {
       return jsonResponse({ error: "Not found" }, 404, {});
     }
 
-    // Delegate API requests to handlers (including CORS preflight)
     if (url.pathname.startsWith("/api/")) {
       if (!isSameOrigin(request)) {
         return jsonResponse({ error: "Forbidden" }, 403, {});
@@ -77,7 +55,6 @@ export default {
 
       const cors = buildCorsHeaders(request);
 
-      // AI compare is disabled until Turnstile and all protections are in place
       if (url.pathname === "/api/compare-ai") {
         return jsonResponse({ error: "Not found" }, 404, cors);
       }
@@ -110,22 +87,18 @@ export default {
       return jsonResponse({ error: "Not found" }, 404, cors);
     }
 
-    // Serve all other paths as static assets (index.html, compare.html, etc.)
     if (staticRouteMap[url.pathname]) {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = staticRouteMap[url.pathname];
       return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
     }
 
-    // Fallback to direct static asset lookup
     return env.ASSETS.fetch(request);
   },
 };
 
-// ─── Handlers ────────────────────────────────────────────────────────────────
-
-const CACHE_TTL_EDGE = 86400;       // Cache API: 24 hours
-const CACHE_TTL_KV   = 7776000;     // KV: 90 days
+const CACHE_TTL_EDGE = 86400;
+const CACHE_TTL_KV   = 7776000;
 
 function buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize) {
   return `search:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
@@ -154,7 +127,6 @@ async function handleSearch(params, db, cors, env, ctx) {
   const cacheUrl = new Request(`https://cache.internal/${kvKey}`);
   const searchMeta = { employer: employer || null, job: job || null, location: location || null, sort, dir, page, page_size: pageSize };
 
-  // ── Tier 1: Edge Cache (per-datacenter, fastest) ───────────────────────────
   const t0 = Date.now();
   try {
     const edgeCached = await caches.default.match(cacheUrl);
@@ -166,7 +138,6 @@ async function handleSearch(params, db, cors, env, ctx) {
     }
   } catch {}
 
-  // ── Tier 2: KV (global, durable) ──────────────────────────────────────────
   try {
     if (env.SEARCH_CACHE) {
       const kvData = await env.SEARCH_CACHE.get(kvKey, { type: "json" });
@@ -184,7 +155,6 @@ async function handleSearch(params, db, cors, env, ctx) {
     }
   } catch {}
 
-  // ── Tier 3: D1 Database (source of truth) ──────────────────────────────────
   const where = [];
   const bindings = [];
 
@@ -281,7 +251,6 @@ async function handleSuggest(params, db, cors) {
                      (field !== "job"      && ctxJob) ||
                      (field !== "location" && ctxLoc);
 
-  // Require at least 2 chars unless context is set (then show hints on focus too)
   if (!hasContext && q.length < 2) {
     return jsonResponse({ results: [] }, 200, cors);
   }
@@ -290,9 +259,6 @@ async function handleSuggest(params, db, cors) {
     let stmt;
 
     if (hasContext) {
-      // Context-aware path: anchor on the exact selected value (composite index seek),
-      // use LIKE '%q%' (contains) for flexibility. When q is empty (focus trigger),
-      // return random samples so user sees what's available without typing.
       const ctxWhere    = [];
       const ctxBindings = [];
 
@@ -310,7 +276,6 @@ async function handleSuggest(params, db, cors) {
       }
 
       if (q.length >= 2) {
-        // Contains match — user is actively typing; composite index handles the context filter
         ctxWhere.push(`${col} LIKE ?`);
         ctxBindings.push(`%${q}%`);
         stmt = db.prepare(
@@ -321,8 +286,6 @@ async function handleSuggest(params, db, cors) {
            LIMIT 8`
         ).bind(...ctxBindings);
       } else {
-        // No query yet (focus trigger): return random samples scoped to context
-        // so user gets a preview of what exists without typing anything
         stmt = db.prepare(
           `SELECT value FROM (
              SELECT DISTINCT ${col} AS value
@@ -332,7 +295,6 @@ async function handleSuggest(params, db, cors) {
         ).bind(...ctxBindings);
       }
     } else {
-      // No context: fast prefix scan on the small suggest table (index range scan)
       stmt = db.prepare(
         `SELECT ${col} AS value
          FROM ${table}
@@ -507,8 +469,6 @@ async function handleCompareAI(request, db, ai, cors) {
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function jsonResponse(body, status, extraHeaders) {
   return new Response(JSON.stringify(body), {
     status,
@@ -516,10 +476,6 @@ function jsonResponse(body, status, extraHeaders) {
   });
 }
 
-/**
- * Allow requests from our own site. Normalize www/non-www so both work.
- * Reject: curl, Postman, scripts (no Origin/Referer), other sites.
- */
 function normHost(host) {
   if (!host) return "";
   return host.replace(/^www\./, "");
@@ -561,8 +517,6 @@ function isCompareEnabled(env) {
   if (raw == null) return DEFAULT_COMPARE_ENABLED;
   return String(raw).toLowerCase() === "true";
 }
-
-// ─── R2 Logging ──────────────────────────────────────────────────────────────
 
 function r2Key(prefix) {
   const now = new Date();
