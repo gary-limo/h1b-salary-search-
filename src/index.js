@@ -18,7 +18,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const MAX_FETCH_SIZE    = 10000;
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
-const DEFAULT_COMPARE_ENABLED = true;
+const DEFAULT_COMPARE_ENABLED = false;
 
 // Columns that can be used in ORDER BY (whitelist to prevent SQL injection)
 const SORTABLE = new Set([
@@ -368,9 +368,9 @@ async function handleCompare(params, db, cors) {
 }
 
 const AI_MAX_EMPLOYERS = 4;
-const AI_MAX_ROLES = 20;
+const AI_ROLES_PER_EMPLOYER = 8;
 const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
-const AI_MAX_TOKENS = 1024;
+const AI_MAX_TOKENS = 512;
 const AI_MAX_HISTORY = 10;
 
 async function handleCompareAI(request, db, ai, cors) {
@@ -406,13 +406,16 @@ async function handleCompareAI(request, db, ai, cors) {
          ORDER BY employer_name, std_career_level`
       ).bind(...employers).all(),
       db.prepare(
-        `SELECT employer_name, job_title, ROUND(AVG(wage_rate_of_pay_from), 0) AS avg_wage,
-                COUNT(*) AS filings
-         FROM h1b_wages
-         WHERE employer_name IN (${placeholders})
-         GROUP BY employer_name, job_title
-         ORDER BY employer_name, avg_wage DESC
-         LIMIT ${AI_MAX_ROLES}`
+        `SELECT employer_name, job_title, avg_wage, filings FROM (
+           SELECT employer_name, job_title,
+                  ROUND(AVG(wage_rate_of_pay_from), 0) AS avg_wage,
+                  COUNT(*) AS filings,
+                  ROW_NUMBER() OVER (PARTITION BY employer_name ORDER BY AVG(wage_rate_of_pay_from) DESC) AS rn
+           FROM h1b_wages
+           WHERE employer_name IN (${placeholders})
+           GROUP BY employer_name, job_title
+         ) WHERE rn <= ${AI_ROLES_PER_EMPLOYER}
+         ORDER BY employer_name, avg_wage DESC`
       ).bind(...employers).all(),
     ]);
 
@@ -428,18 +431,13 @@ async function handleCompareAI(request, db, ai, cors) {
       .join("\n");
 
     const systemMsg = [
-      "You are a friendly, knowledgeable H-1B salary analyst. You have the following real salary data ",
-      "(US Dept of Labor, FY2025). Each row: Employer | Job Title | Avg Annual Wage | Filings.",
+      "You are a sharp, concise H-1B salary analyst. Here is real salary data (US Dept of Labor).",
+      "Format: Employer | Job Title | Avg Annual Wage | Filings count.",
       "",
       dataBlock,
       "",
-      "Rules:",
-      "- Answer questions about this data conversationally and concisely.",
-      "- Explain what roles do, find equivalent roles across employers, compare pay.",
-      "- Use only the data above. Do not invent numbers.",
-      "- Format dollar amounts with commas (e.g. $120,000).",
-      "- Keep responses short (2-4 paragraphs max) unless user asks for detail.",
-      "- Be engaging and helpful, like a smart colleague explaining salary data.",
+      "Rules: Be brief — 2-3 short sentences per answer. Use only the data above.",
+      "Format dollars with commas. No markdown. No bullet points. Conversational tone.",
     ].join("\n");
 
     const messages = [{ role: "system", content: systemMsg }];
