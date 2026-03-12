@@ -707,10 +707,22 @@ $("searchForm").addEventListener("submit", async ev => {
   await executeSearch();
 });
 
-[{input: empInput, inner: empFieldInner}, {input: jobInput, inner: jobFieldInner}, {input: locInput, inner: locFieldInner}]
-  .forEach(({input, inner}) => {
-    input.addEventListener("focus", () => inner.classList.add("focused"));
-    input.addEventListener("blur",  () => inner.classList.remove("focused"));
+const PLACEHOLDERS = {
+  employer: { default: "Employer (e.g. Intel)", focus: "Type employer name" },
+  job:      { default: "Job title",            focus: "Type job title" },
+  location: { default: "Location (e.g. Seattle)", focus: "Type location" }
+};
+[{input: empInput, inner: empFieldInner, key: "employer"}, {input: jobInput, inner: jobFieldInner, key: "job"}, {input: locInput, inner: locFieldInner, key: "location"}]
+  .forEach(({input, inner, key}) => {
+    const ph = PLACEHOLDERS[key];
+    input.addEventListener("focus", () => {
+      inner.classList.add("focused");
+      input.placeholder = ph.focus;
+    });
+    input.addEventListener("blur", () => {
+      inner.classList.remove("focused");
+      input.placeholder = ph.default;
+    });
   });
 
 document.addEventListener("click", () => {
