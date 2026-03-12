@@ -22,11 +22,6 @@ UPDATE h1b_wages
 SET employer_name = replace(replace(employer_name, 'P.C.', 'PC'), 'p.c.', 'pc')
 WHERE employer_name LIKE '%P.C.%' OR employer_name LIKE '%p.c.%';
 
--- Remove double quotes and = from job titles
-UPDATE h1b_wages
-SET job_title = replace(replace(job_title, '"', ''), '=', '')
-WHERE job_title LIKE '%"%' OR job_title LIKE '%=%';
-
 -- Trim leading and trailing whitespace from employer_name and job_title
 UPDATE h1b_wages
 SET employer_name = trim(employer_name),

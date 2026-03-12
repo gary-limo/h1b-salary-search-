@@ -166,7 +166,7 @@ async function handleSearch(params, db, cors, env, ctx) {
   }
   if (job) {
     where.push("job_title LIKE ?");
-    bindings.push(`${job.toLowerCase()}%`);
+    bindings.push(`%${job.toLowerCase()}%`);
   }
   if (location) {
     where.push("(worksite_city LIKE ? OR worksite_state LIKE ?)");
