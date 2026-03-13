@@ -18,3 +18,6 @@ h1b_wages_export.sql
 !.dev.vars.example
 .env*
 !.env.example
+*test*.html
+*.txt
+

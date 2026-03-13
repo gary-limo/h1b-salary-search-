@@ -17,7 +17,6 @@ const SORTABLE = new Set([
 const SUGGEST_FIELDS = {
   employer:  { col: "employer_name", table: "h1b_suggest_employers" },
   job:       { col: "job_title",     table: "h1b_suggest_jobs"      },
-  location:  { col: "worksite_city", table: "h1b_suggest_locations" },
 };
 
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
@@ -166,7 +165,7 @@ async function handleSearch(params, db, cors, env, ctx) {
   }
   if (job) {
     where.push("job_title LIKE ?");
-    bindings.push(`%${job.toLowerCase()}%`);
+    bindings.push(`${job.toLowerCase()}%`);
   }
   if (location) {
     where.push("(worksite_city LIKE ? OR worksite_state LIKE ?)");

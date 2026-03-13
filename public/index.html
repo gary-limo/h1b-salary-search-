@@ -279,6 +279,13 @@ th.th-filterable{position:relative}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
+      <div class="load-progress" id="loadProgress">
+        <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
+        <div class="load-status">
+          <span class="load-text" id="loadText">Initializing suggestions…</span>
+          <span class="load-pct" id="loadPct">0%</span>
+        </div>
+      </div>
     </form>
 
     <div class="popular">
@@ -756,6 +763,145 @@ POPULAR.forEach(item => {
 let selEmp = "", selJob = "", selLoc = "";
 const acTimers = {};
 
+let pqConn = null;
+let pqReady = false;
+
+function setProgress(pct, text) {
+  const bar = $("loadBar"), pctEl = $("loadPct"), txtEl = $("loadText");
+  if (bar) bar.style.width = `${pct}%`;
+  if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
+  if (text && txtEl) txtEl.textContent = text;
+}
+
+function escSql(s) { return s.replace(/'/g, "''"); }
+
+async function pqSuggest(col, q, filterCol, filterVal) {
+  if (!pqReady || !pqConn) return [];
+  const p = escSql(q.trim().toLowerCase());
+  if (!p) return [];
+  let where = `lower(${col}) LIKE '${p}%'`;
+  if (filterCol && filterVal) {
+    where += ` AND lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}'`;
+  }
+  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v LIMIT 8`);
+  return r.toArray().map(r => r.v).filter(Boolean);
+}
+
+async function pqSubstrSuggest(col, q, filterCol, filterVal) {
+  if (!pqReady || !pqConn) return [];
+  const p = escSql(q.trim().toLowerCase());
+  if (!p) return [];
+  let where = `lower(${col}) LIKE '%${p}%' AND lower(${col}) NOT LIKE '${p}%'`;
+  if (filterCol && filterVal) {
+    where += ` AND lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}'`;
+  }
+  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v LIMIT 8`);
+  return r.toArray().map(r => r.v).filter(Boolean);
+}
+
+async function showRelatedSuggestions(selectedField, selectedValue) {
+  const otherCol = selectedField === "employer" ? "job" : "employer";
+  const otherDD = $(selectedField === "employer" ? "jobDropdown" : "empDropdown");
+  const otherInput = selectedField === "employer" ? jobInput : empInput;
+  const otherFieldInner = $(selectedField === "employer" ? "jobFieldInner" : "empFieldInner");
+  if (!pqReady || !pqConn) return;
+
+  otherDD.innerHTML = '<div class="dropdown-loading">Loading\u2026</div>';
+  otherDD.className = "dropdown open";
+  otherFieldInner.classList.add("focused");
+
+  try {
+    const r = await pqConn.query(
+      `SELECT DISTINCT ${otherCol} AS v FROM pairs WHERE lower(${selectedField}) = '${escSql(selectedValue.toLowerCase())}' ORDER BY v LIMIT 20`
+    );
+    const items = r.toArray().map(r => r.v).filter(Boolean);
+    if (!items.length) { otherDD.className = "dropdown"; otherDD.innerHTML = ""; return; }
+
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "padding:6px 14px;font-size:11px;color:#B8A062;font-weight:600;border-bottom:1px solid #F0ECE8;background:#FAFAF8";
+    hdr.textContent = selectedField === "employer"
+      ? `Jobs at ${selectedValue}`
+      : `Employers hiring ${toTitleCase(selectedValue)}`;
+
+    otherDD.innerHTML = "";
+    otherDD.appendChild(hdr);
+
+    items.forEach(v => {
+      const el = document.createElement("div");
+      el.className = "dropdown-item";
+      el.setAttribute("data-val", v);
+      el.textContent = toTitleCase(v);
+      el.addEventListener("mousedown", e => {
+        e.preventDefault();
+        otherInput.value = otherCol === "job" ? toTitleCase(v) : v;
+        if (otherCol === "employer") selEmp = v; else selJob = v;
+        updateClearBtn();
+        otherDD.className = "dropdown"; otherDD.innerHTML = "";
+      });
+      otherDD.appendChild(el);
+    });
+  } catch (err) {
+    console.error(err);
+    otherDD.className = "dropdown"; otherDD.innerHTML = "";
+  }
+}
+
+async function initParquetSuggestions() {
+  try {
+    const DUCKDB_VERSION = "1.29.0";
+    const CDN = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/dist`;
+    const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
+
+    $("loadProgress").classList.add("show");
+    setProgress(5, "Initializing suggestions\u2026");
+
+    const bundle = await duckdb.selectBundle({
+      mvp: { mainModule: `${CDN}/duckdb-mvp.wasm`, mainWorker: `${CDN}/duckdb-browser-mvp.worker.js` },
+      eh: { mainModule: `${CDN}/duckdb-eh.wasm`, mainWorker: `${CDN}/duckdb-browser-eh.worker.js` },
+    });
+    setProgress(15, "Loading engine\u2026");
+    const worker = await duckdb.createWorker(bundle.mainWorker);
+    const logger = { log(){}, warn(){}, error(){}, info(){}, debug(){} };
+    const db = new duckdb.AsyncDuckDB(logger, worker);
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    pqConn = await db.connect();
+    setProgress(25, "Downloading suggestion data\u2026");
+
+    const res = await fetch("pairs_v2.parquet");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const total = Number(res.headers.get("content-length")) || 0;
+    let loaded = 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      if (total) setProgress(25 + (loaded / total) * 60, `Downloading\u2026 ${(loaded / 1048576).toFixed(1)}MB`);
+    }
+    const buf = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
+
+    setProgress(88, "Building suggestion index\u2026");
+    await db.registerFileBuffer("pairs_v2.parquet", buf);
+    await pqConn.query("CREATE TABLE pairs AS SELECT * FROM read_parquet('pairs_v2.parquet')");
+
+    pqReady = true;
+    setProgress(100, "Ready!");
+    setTimeout(() => $("loadProgress").classList.remove("show"), 600);
+  } catch (err) {
+    console.error("Parquet suggestion init failed:", err);
+    const txtEl = $("loadText");
+    if (txtEl) txtEl.textContent = "Suggestions: using API fallback";
+    setTimeout(() => {
+      const lp = $("loadProgress");
+      if (lp) lp.classList.remove("show");
+    }, 2000);
+  }
+}
+
 function acGetContext(field) {
   const ctx = {};
   if (field !== "employer" && selEmp) ctx.employer = selEmp;
@@ -774,6 +920,8 @@ function acCloseAll() {
 function acSetup(input, dropdownId, field) {
   const dd = $(dropdownId);
   let highlighted = -1;
+  const usePq = field === "employer" || field === "job";
+  const pqCol = field === "employer" ? "employer" : "job";
 
   function closeDD() {
     dd.className = "dropdown";
@@ -797,6 +945,7 @@ function acSetup(input, dropdownId, field) {
         else { selLoc = val; input.value = toTitleCase(val); }
         updateClearBtn();
         closeDD();
+        if (usePq) showRelatedSuggestions(field, val);
       });
     });
   }
@@ -810,30 +959,50 @@ function acSetup(input, dropdownId, field) {
   }
 
   async function fetchSuggest(q) {
-    const ctx = acGetContext(field);
-    const hasCtx = Object.keys(ctx).length > 0;
-    if (!hasCtx && q.length < 2) { closeDD(); return; }
-    dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
-    dd.className = "dropdown open";
-    clearTimeout(acTimers[field]);
-    acTimers[field] = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ field, q, ...ctx });
-        const res  = await fetch(`/api/suggest?${params}`);
-        const data = await res.json();
-        renderItems(data.results || []);
-      } catch { closeDD(); }
-    }, q.length === 0 ? 0 : 250);
+    if (usePq && pqReady) {
+      const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
+      if (!hasCtx && q.length < 2) { closeDD(); return; }
+      dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
+      dd.className = "dropdown open";
+      clearTimeout(acTimers[field]);
+      acTimers[field] = setTimeout(async () => {
+        try {
+          const filterCol = field === "employer" ? (selJob ? "job" : null) : (selEmp ? "employer" : null);
+          const filterVal = field === "employer" ? selJob : selEmp;
+          const prefix = await pqSuggest(pqCol, q, filterCol, filterVal);
+          const substr = q.length >= 2 ? await pqSubstrSuggest(pqCol, q, filterCol, filterVal) : [];
+          const seen = new Set(), merged = [];
+          for (const s of [...prefix, ...substr]) {
+            if (!seen.has(s)) { seen.add(s); merged.push(s); }
+            if (merged.length >= 8) break;
+          }
+          renderItems(merged);
+        } catch { closeDD(); }
+      }, 120);
+    } else {
+      const ctx = acGetContext(field);
+      const hasCtx = Object.keys(ctx).length > 0;
+      if (!hasCtx && q.length < 2) { closeDD(); return; }
+      dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
+      dd.className = "dropdown open";
+      clearTimeout(acTimers[field]);
+      acTimers[field] = setTimeout(async () => {
+        try {
+          const params = new URLSearchParams({ field, q, ...ctx });
+          const res = await fetch(`/api/suggest?${params}`);
+          const data = await res.json();
+          renderItems(data.results || []);
+        } catch { closeDD(); }
+      }, q.length === 0 ? 0 : 250);
+    }
   }
 
   input.addEventListener("input", () => {
     if (field === "employer") selEmp = "";
     else if (field === "job") selJob = "";
     else selLoc = "";
-
-    const q = input.value.trim();
     clearTimeout(acTimers[field]);
-    fetchSuggest(q);
+    fetchSuggest(input.value.trim());
   });
 
   input.addEventListener("focus", () => {
@@ -855,6 +1024,7 @@ function acSetup(input, dropdownId, field) {
       else { selLoc = val; input.value = toTitleCase(val); }
       updateClearBtn();
       closeDD();
+      if (usePq) showRelatedSuggestions(field, val);
     } else if (e.key === "Escape") { closeDD(); }
   });
 
@@ -863,7 +1033,8 @@ function acSetup(input, dropdownId, field) {
 
 acSetup(empInput, "empDropdown", "employer");
 acSetup(jobInput, "jobDropdown", "job");
-acSetup(locInput, "locDropdown", "location");
+
+initParquetSuggestions();
 
 const origClearClick = $("clearBtn").onclick;
 $("clearBtn").addEventListener("click", () => {

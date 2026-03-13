@@ -164,6 +164,7 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
 <script>
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 function fmtUSD(v) { return v == null ? null : usd.format(v); }
+function toTitleCase(s) { if (!s) return s; return s.replace(/\b\w/g, c => c.toUpperCase()); }
 
 function set(id, val) {
   const el = document.getElementById(id);
