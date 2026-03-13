@@ -783,7 +783,7 @@ async function pqSuggest(col, q, filterCol, filterVal) {
   if (filterCol && filterVal) {
     where += ` AND lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}'`;
   }
-  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v LIMIT 8`);
+  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v`);
   return r.toArray().map(r => r.v).filter(Boolean);
 }
 
@@ -795,7 +795,7 @@ async function pqSubstrSuggest(col, q, filterCol, filterVal) {
   if (filterCol && filterVal) {
     where += ` AND lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}'`;
   }
-  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v LIMIT 8`);
+  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v`);
   return r.toArray().map(r => r.v).filter(Boolean);
 }
 
@@ -812,20 +812,12 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
 
   try {
     const r = await pqConn.query(
-      `SELECT DISTINCT ${otherCol} AS v FROM pairs WHERE lower(${selectedField}) = '${escSql(selectedValue.toLowerCase())}' ORDER BY v LIMIT 20`
+      `SELECT DISTINCT ${otherCol} AS v FROM pairs WHERE lower(${selectedField}) = '${escSql(selectedValue.toLowerCase())}' ORDER BY v`
     );
     const items = r.toArray().map(r => r.v).filter(Boolean);
     if (!items.length) { otherDD.className = "dropdown"; otherDD.innerHTML = ""; return; }
 
-    const hdr = document.createElement("div");
-    hdr.style.cssText = "padding:6px 14px;font-size:11px;color:#B8A062;font-weight:600;border-bottom:1px solid #F0ECE8;background:#FAFAF8";
-    hdr.textContent = selectedField === "employer"
-      ? `Jobs at ${selectedValue}`
-      : `Employers hiring ${toTitleCase(selectedValue)}`;
-
     otherDD.innerHTML = "";
-    otherDD.appendChild(hdr);
-
     items.forEach(v => {
       const el = document.createElement("div");
       el.className = "dropdown-item";
@@ -974,7 +966,6 @@ function acSetup(input, dropdownId, field) {
           const seen = new Set(), merged = [];
           for (const s of [...prefix, ...substr]) {
             if (!seen.has(s)) { seen.add(s); merged.push(s); }
-            if (merged.length >= 8) break;
           }
           renderItems(merged);
         } catch { closeDD(); }
