@@ -81,6 +81,9 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .search-box{max-width:680px;margin:0 auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px}
 .search-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;position:relative;z-index:100}
 .field-wrap{position:relative;z-index:100}
+.field-wrap:nth-child(1){z-index:130}
+.field-wrap:nth-child(2){z-index:120}
+.field-wrap:nth-child(3){z-index:110}
 .field-inner{position:relative;background:rgba(255,255,255,.95);border-radius:10px;border:1.5px solid transparent;transition:border .15s,box-shadow .15s}
 .field-inner.focused{background:#fff;border-color:#B8A062;box-shadow:0 0 0 3px rgba(184,160,98,.2)}
 .field-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:rgba(27,42,74,.35);pointer-events:none;transition:color .15s;display:flex}
