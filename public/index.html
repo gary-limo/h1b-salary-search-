@@ -799,6 +799,14 @@ async function pqSubstrSuggest(col, q, filterCol, filterVal) {
   return r.toArray().map(r => r.v).filter(Boolean);
 }
 
+async function pqContextSuggest(col, filterCol, filterVal) {
+  if (!pqReady || !pqConn || !filterCol || !filterVal) return [];
+  const r = await pqConn.query(
+    `SELECT DISTINCT ${col} AS v FROM pairs WHERE lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}' ORDER BY v`
+  );
+  return r.toArray().map(r => r.v).filter(Boolean);
+}
+
 async function showRelatedSuggestions(selectedField, selectedValue) {
   const otherCol = selectedField === "employer" ? "job" : "employer";
   const otherDD = $(selectedField === "employer" ? "jobDropdown" : "empDropdown");
@@ -937,7 +945,6 @@ function acSetup(input, dropdownId, field) {
         else { selLoc = val; input.value = toTitleCase(val); }
         updateClearBtn();
         closeDD();
-        if (usePq) showRelatedSuggestions(field, val);
       });
     });
   }
@@ -961,13 +968,17 @@ function acSetup(input, dropdownId, field) {
         try {
           const filterCol = field === "employer" ? (selJob ? "job" : null) : (selEmp ? "employer" : null);
           const filterVal = field === "employer" ? selJob : selEmp;
-          const prefix = await pqSuggest(pqCol, q, filterCol, filterVal);
-          const substr = q.length >= 2 ? await pqSubstrSuggest(pqCol, q, filterCol, filterVal) : [];
-          const seen = new Set(), merged = [];
-          for (const s of [...prefix, ...substr]) {
-            if (!seen.has(s)) { seen.add(s); merged.push(s); }
+          if (hasCtx && q.length === 0) {
+            renderItems(await pqContextSuggest(pqCol, filterCol, filterVal));
+          } else {
+            const prefix = await pqSuggest(pqCol, q, filterCol, filterVal);
+            const substr = q.length >= 2 ? await pqSubstrSuggest(pqCol, q, filterCol, filterVal) : [];
+            const seen = new Set(), merged = [];
+            for (const s of [...prefix, ...substr]) {
+              if (!seen.has(s)) { seen.add(s); merged.push(s); }
+            }
+            renderItems(merged);
           }
-          renderItems(merged);
         } catch { closeDD(); }
       }, 120);
     } else {
@@ -1015,7 +1026,6 @@ function acSetup(input, dropdownId, field) {
       else { selLoc = val; input.value = toTitleCase(val); }
       updateClearBtn();
       closeDD();
-      if (usePq) showRelatedSuggestions(field, val);
     } else if (e.key === "Escape") { closeDD(); }
   });
 
