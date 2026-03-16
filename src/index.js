@@ -383,6 +383,10 @@ function isSameOrigin(request) {
     } catch {}
   }
 
+  // Same-host fallback: browsers sometimes omit Origin/Referer for same-origin fetch.
+  // Still requires valid API token when env.API_TOKEN is set.
+  if (!origin && !referer && workerHost) return true;
+
   return false;
 }
 
@@ -391,7 +395,7 @@ function buildCorsHeaders(request) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-API-Token",
     "Vary": "Origin",
   };
 }
