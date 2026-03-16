@@ -21,6 +21,25 @@ npm install
 npm run dev
 ```
 
+## Python Scripts (Data / ML)
+
+Python scripts (e.g. `scripts/create_db.py`, `scripts/to_parquet.py`, ML training) run inside a virtual environment:
+
+```bash
+# Create venv (one-time)
+python3 -m venv .venv
+
+# Activate venv
+source .venv/bin/activate   # macOS/Linux
+# .venv\Scripts\activate    # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run scripts (always with venv active)
+python scripts/create_db.py
+```
+
 ## Deploy
 
 ```bash

@@ -1,8 +1,7 @@
 const DEFAULT_PAGE_SIZE = 100;
-const MAX_FETCH_SIZE    = 10000;
+const MAX_FETCH_SIZE    = 100;
 const MAX_INPUT_LENGTH = 200;
 const MAX_PAGE = 10000;
-const DEFAULT_COMPARE_ENABLED = false;
 
 const SORTABLE = new Set([
   "employer_name",
@@ -14,30 +13,18 @@ const SORTABLE = new Set([
   "end_date",
 ]);
 
-const SUGGEST_FIELDS = {
-  employer:  { col: "employer_name", table: "h1b_suggest_employers" },
-  job:       { col: "job_title",     table: "h1b_suggest_jobs"      },
-};
-
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const compareEnabled = isCompareEnabled(env);
     const staticRouteMap = {
       "/": "/index.html",
-      "/compare": "/compare.html",
       "/record": "/record.html",
     };
 
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p))) {
       return new Response("Not Found", { status: 404 });
-    }
-
-    const COMPARE_PATHS = ["/compare", "/compare.html", "/api/compare", "/api/compare-ai"];
-    if (!compareEnabled && COMPARE_PATHS.includes(url.pathname)) {
-      return jsonResponse({ error: "Not found" }, 404, {});
     }
 
     if (url.pathname.startsWith("/api/")) {
@@ -54,33 +41,34 @@ export default {
 
       const cors = buildCorsHeaders(request);
 
-      if (url.pathname === "/api/compare-ai") {
-        return jsonResponse({ error: "Not found" }, 404, cors);
-      }
-
       if (request.method !== "GET") {
         return jsonResponse({ error: "Method not allowed" }, 405, cors);
+      }
+
+      if (env.API_TOKEN) {
+        const token = request.headers.get("X-API-Token");
+        if (token !== env.API_TOKEN) {
+          return jsonResponse({ error: "Forbidden" }, 403, cors);
+        }
       }
 
       const ip = request.headers.get("cf-connecting-ip") || "unknown";
       if (env.API_RATE_LIMITER) {
         const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
         if (!success) {
-          return jsonResponse({ error: "Too many requests. Please try again later." }, 429, cors);
+          return jsonResponse(
+            { error: "Too many requests. Please try again later." },
+            429,
+            { ...cors, "Retry-After": "60" }
+          );
         }
       }
 
       if (url.pathname === "/api/search") {
         return handleSearch(url.searchParams, env.DB, cors, env, ctx);
       }
-      if (url.pathname === "/api/suggest") {
-        return handleSuggest(url.searchParams, env.DB, cors, env, ctx);
-      }
       if (url.pathname === "/api/record") {
         return handleRecord(url.searchParams, env.DB, cors);
-      }
-      if (url.pathname === "/api/compare") {
-        return handleCompare(url.searchParams, env.DB, cors);
       }
 
       return jsonResponse({ error: "Not found" }, 404, cors);
@@ -89,7 +77,18 @@ export default {
     if (staticRouteMap[url.pathname]) {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = staticRouteMap[url.pathname];
-      return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+      const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+      if (env.API_TOKEN) {
+        const html = await response.text();
+        const injected = html.replace(
+          '<meta charset="UTF-8">',
+          `<meta charset="UTF-8"><meta name="api-token" content="${env.API_TOKEN}">`
+        );
+        const newHeaders = new Headers(response.headers);
+        newHeaders.delete("content-length");
+        return new Response(injected, { status: response.status, headers: newHeaders });
+      }
+      return response;
     }
 
     return env.ASSETS.fetch(request);
@@ -98,8 +97,6 @@ export default {
 
 const CACHE_TTL_EDGE = 86400;
 const CACHE_TTL_KV   = 7776000;
-const CACHE_TTL_KV_SUGGEST = 2592000;
-const SUGGEST_KV_MAX_Q_LEN = 4;
 
 function buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize) {
   return `search:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
@@ -160,25 +157,29 @@ async function handleSearch(params, db, cors, env, ctx) {
   const bindings = [];
 
   if (employer) {
-    where.push("employer_name LIKE ?");
-    bindings.push(`${employer.toLowerCase()}%`);
+    where.push("LOWER(employer_name) = LOWER(?)");
+    bindings.push(employer);
   }
   if (job) {
-    where.push("job_title LIKE ?");
-    bindings.push(`${job.toLowerCase()}%`);
+    where.push("LOWER(job_title) = LOWER(?)");
+    bindings.push(job);
   }
   if (location) {
-    where.push("(worksite_city LIKE ? OR worksite_state LIKE ?)");
-    bindings.push(`${location.toLowerCase()}%`, `${location.toLowerCase()}%`);
+    where.push("(LOWER(worksite_city) = LOWER(?) OR LOWER(worksite_state) = LOWER(?))");
+    bindings.push(location, location);
   }
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const countSQL = `SELECT COUNT(*) AS cnt FROM h1b_wages ${whereClause}`;
   const dataSQL = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
 
   try {
-    const rows = await db.prepare(dataSQL).bind(...bindings).all();
+    const [countRow, rows] = await Promise.all([
+      db.prepare(countSQL).bind(...bindings).first(),
+      db.prepare(dataSQL).bind(...bindings).all(),
+    ]);
     const duration = Date.now() - t0;
-    const total = rows.results?.length ?? 0;
+    const total = countRow?.cnt ?? 0;
     const payload = { total, page, pageSize, results: rows.results };
     const response = jsonResponse(payload, 200, cors);
 
@@ -203,9 +204,11 @@ async function handleSearch(params, db, cors, env, ctx) {
   }
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 async function handleRecord(params, db, cors) {
-  const id = parseInt(params.get("id") || "0", 10);
-  if (!id || id < 1 || !Number.isFinite(id)) {
+  const id = (params.get("id") || "").trim().slice(0, 50);
+  if (!id || !UUID_REGEX.test(id)) {
     return jsonResponse({ error: "Invalid record ID." }, 400, cors);
   }
   try {
@@ -243,8 +246,11 @@ async function handleSuggest(params, db, cors, env, ctx) {
   const ctxEmp   = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const ctxJob   = (params.get("job")      || "").trim().slice(0, MAX_INPUT_LENGTH);
   const ctxLoc   = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
-  const cfg      = SUGGEST_FIELDS[field];
 
+  // Employer/job suggestions use parquet client-side; suggest tables removed
+  if (field === "employer" || field === "job") return jsonResponse({ results: [] }, 200, cors);
+
+  const cfg = SUGGEST_FIELDS[field];
   if (!cfg) return jsonResponse({ results: [] }, 200, cors);
 
   const { col, table } = cfg;
@@ -300,8 +306,8 @@ async function handleSuggest(params, db, cors, env, ctx) {
       }
 
       if (q.length >= 2) {
-        ctxWhere.push(`${col} LIKE ?`);
-        ctxBindings.push(`%${q}%`);
+        ctxWhere.push(`LOWER(${col}) = LOWER(?)`);
+        ctxBindings.push(q);
         stmt = db.prepare(
           `SELECT DISTINCT ${col} AS value
            FROM h1b_wages
@@ -322,10 +328,10 @@ async function handleSuggest(params, db, cors, env, ctx) {
       stmt = db.prepare(
         `SELECT ${col} AS value
          FROM ${table}
-         WHERE ${col} LIKE ?
+         WHERE LOWER(${col}) = LOWER(?)
          ORDER BY ${col}
          LIMIT 8`
-      ).bind(`${q}%`);
+      ).bind(q);
     }
 
     const { results } = await stmt.all();
@@ -344,159 +350,6 @@ async function handleSuggest(params, db, cors, env, ctx) {
   } catch (err) {
     console.error("Suggest error:", err);
     return jsonResponse({ error: "Suggestion lookup failed." }, 500, cors);
-  }
-}
-
-async function handleCompare(params, db, cors) {
-  const raw = (params.get("employers") || "").trim();
-  if (!raw) {
-    return jsonResponse({ error: "Provide at least one employer." }, 400, cors);
-  }
-
-  const employers = raw.split("||").map(e => e.trim()).filter(Boolean).slice(0, 4);
-  if (employers.length === 0) {
-    return jsonResponse({ error: "Provide at least one employer." }, 400, cors);
-  }
-
-  const placeholders = employers.map(() => "?").join(",");
-
-  try {
-    const { results } = await db
-      .prepare(
-        `SELECT employer_name, ROUND(avg_wage, 0) AS avg_wage,
-                std_career_level
-         FROM h1b_salary_summary
-         WHERE employer_name IN (${placeholders})
-         ORDER BY employer_name, std_career_level`
-      )
-      .bind(...employers)
-      .all();
-
-    return jsonResponse({ results: results || [] }, 200, cors);
-  } catch (err) {
-    console.error("Compare error:", err);
-    const msg = String(err && err.message ? err.message : err);
-    if (msg.includes("no such table: h1b_salary_summary")) {
-      return jsonResponse({ error: "Compare data is not initialized. Run migration 0002 to create h1b_salary_summary." }, 500, cors);
-    }
-    return jsonResponse({ error: "Comparison failed. Please try again." }, 500, cors);
-  }
-}
-
-const AI_MAX_EMPLOYERS = 4;
-const AI_ROLES_PER_EMPLOYER = 8;
-const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
-const AI_MAX_TOKENS = 512;
-const AI_MAX_HISTORY = 10;
-
-async function handleCompareAI(request, db, ai, cors) {
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "Invalid JSON body." }, 400, cors);
-  }
-
-  const raw = Array.isArray(body?.employers) ? body.employers : [];
-  const employers = raw
-    .map(e => (typeof e === "string" ? e.trim() : ""))
-    .filter(Boolean)
-    .slice(0, AI_MAX_EMPLOYERS);
-
-  if (employers.length < 2) {
-    return jsonResponse({ error: "Provide 2–4 employer names." }, 400, cors);
-  }
-
-  const userMessages = Array.isArray(body?.messages) ? body.messages : [];
-  const isChat = userMessages.length > 0;
-  const wantsStream = body?.stream === true;
-
-  try {
-    const placeholders = employers.map(() => "?").join(",");
-
-    const [summaryResult, rolesResult] = await Promise.all([
-      db.prepare(
-        `SELECT employer_name, ROUND(avg_wage, 0) AS avg_wage, std_career_level
-         FROM h1b_salary_summary
-         WHERE employer_name IN (${placeholders})
-         ORDER BY employer_name, std_career_level`
-      ).bind(...employers).all(),
-      db.prepare(
-        `SELECT employer_name, job_title, avg_wage, filings FROM (
-           SELECT employer_name, job_title,
-                  ROUND(AVG(wage_rate_of_pay_from), 0) AS avg_wage,
-                  COUNT(*) AS filings,
-                  ROW_NUMBER() OVER (PARTITION BY employer_name ORDER BY AVG(wage_rate_of_pay_from) DESC) AS rn
-           FROM h1b_wages
-           WHERE employer_name IN (${placeholders})
-           GROUP BY employer_name, job_title
-         ) WHERE rn <= ${AI_ROLES_PER_EMPLOYER}
-         ORDER BY employer_name, avg_wage DESC`
-      ).bind(...employers).all(),
-    ]);
-
-    const summaryData = summaryResult?.results || [];
-    const rolesData = rolesResult?.results || [];
-
-    if (rolesData.length === 0) {
-      return jsonResponse({ error: "No salary data found for those employers." }, 404, cors);
-    }
-
-    const dataBlock = rolesData
-      .map(r => `${r.employer_name} | ${r.job_title} | $${r.avg_wage} | ${r.filings} filings`)
-      .join("\n");
-
-    const systemMsg = [
-      "You are a sharp, concise H-1B salary analyst. Here is real salary data (US Dept of Labor).",
-      "Format: Employer | Job Title | Avg Annual Wage | Filings count.",
-      "",
-      dataBlock,
-      "",
-      "Rules: Be brief — 2-3 short sentences per answer. Use only the data above.",
-      "Format dollars with commas. No markdown. No bullet points. Conversational tone.",
-    ].join("\n");
-
-    const messages = [{ role: "system", content: systemMsg }];
-
-    if (isChat) {
-      const history = userMessages.slice(-AI_MAX_HISTORY);
-      for (const m of history) {
-        const role = m.role === "assistant" ? "assistant" : "user";
-        const content = String(m.content || "").slice(0, 500);
-        if (content) messages.push({ role, content });
-      }
-    } else {
-      messages.push({
-        role: "user",
-        content: "Give me a quick, engaging overview of how these employers compare on H-1B salaries. " +
-          "What roles do they hire for, and who pays best?"
-      });
-    }
-
-    if (wantsStream) {
-      const stream = await ai.run(AI_MODEL, {
-        messages,
-        max_tokens: AI_MAX_TOKENS,
-        temperature: 0.5,
-        stream: true,
-      });
-      return new Response(stream, {
-        headers: { "content-type": "text/event-stream", ...cors },
-      });
-    }
-
-    const aiResult = await ai.run(AI_MODEL, {
-      messages,
-      max_tokens: AI_MAX_TOKENS,
-      temperature: 0.5,
-    });
-
-    const response = { analysis: aiResult?.response ?? "", data: summaryData };
-    if (!isChat) response.data = summaryData;
-    return jsonResponse(response, 200, cors);
-  } catch (err) {
-    console.error("Compare-AI error:", err);
-    return jsonResponse({ error: "AI comparison failed. Please try again." }, 500, cors);
   }
 }
 
@@ -541,12 +394,6 @@ function buildCorsHeaders(request) {
     "Access-Control-Allow-Headers": "Content-Type",
     "Vary": "Origin",
   };
-}
-
-function isCompareEnabled(env) {
-  const raw = env?.COMPARE_ENABLED;
-  if (raw == null) return DEFAULT_COMPARE_ENABLED;
-  return String(raw).toLowerCase() === "true";
 }
 
 function r2Key(prefix) {

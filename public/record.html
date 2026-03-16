@@ -76,7 +76,7 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
 <nav>
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
-  <a href="/" class="nav-back">
+  <a href="/" class="nav-back" id="backBtn" onclick="event.preventDefault(); if (window.history.length > 1) { window.history.back(); } else { window.close(); }">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
     Back to Search
   </a>
@@ -162,6 +162,7 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
 </main>
 
 <script>
+const API_TOKEN = document.querySelector('meta[name="api-token"]')?.content || '';
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 function fmtUSD(v) { return v == null ? null : usd.format(v); }
 function toTitleCase(s) { if (!s) return s; return s.replace(/\b\w/g, c => c.toUpperCase()); }
@@ -173,7 +174,8 @@ function set(id, val) {
     el.textContent = "—";
     el.classList.add("empty");
   } else {
-    el.textContent = val;
+    const displayVal = (typeof val === "string") ? val.toUpperCase() : val;
+    el.textContent = displayVal;
     el.classList.remove("empty");
   }
 }
@@ -187,7 +189,9 @@ function cityStateZip(city, state, zip) {
 }
 
 async function loadRecord(id) {
-  const res = await fetch(`/api/record?id=${encodeURIComponent(id)}`);
+  const res = await fetch(`/api/record?id=${encodeURIComponent(id)}`, {
+    headers: API_TOKEN ? { "X-API-Token": API_TOKEN } : {},
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Error ${res.status}`);
@@ -195,11 +199,13 @@ async function loadRecord(id) {
   return (await res.json()).result;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 async function init() {
   const params = new URLSearchParams(location.search);
-  const id = params.get("id");
+  const id = (params.get("id") || "").trim();
 
-  if (!id || isNaN(id)) {
+  if (!id || !UUID_REGEX.test(id)) {
     document.getElementById("pageTitle").textContent = "Record not found";
     document.getElementById("errorMsg").textContent = "No valid record ID provided.";
     document.getElementById("errorBox").style.display = "flex";
@@ -209,9 +215,11 @@ async function init() {
   try {
     const r = await loadRecord(id);
 
-    document.title = `${r.employer_name || "H1B Record"} – ${r.job_title || ""} | H1B Salary Search`;
-    document.getElementById("pageTitle").textContent = r.employer_name || "H1B Record";
-    document.getElementById("pageSub").textContent = r.job_title || "";
+    const empCaps = (r.employer_name && String(r.employer_name).toUpperCase()) || "H1B Record";
+    const jobCaps = (r.job_title && String(r.job_title).toUpperCase()) || "";
+    document.title = `${empCaps} – ${jobCaps} | H1B Salary Search`;
+    document.getElementById("pageTitle").textContent = empCaps;
+    document.getElementById("pageSub").textContent = jobCaps;
 
     // Salary hero
     set("dWageFrom",  fmtUSD(r.wage_rate_of_pay_from));

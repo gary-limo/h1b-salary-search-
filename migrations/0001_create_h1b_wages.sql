@@ -2,7 +2,7 @@
 -- Run: wrangler d1 execute <db-name> --remote --file=./migrations/0001_create_h1b_wages.sql
 
 CREATE TABLE IF NOT EXISTS h1b_wages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     case_number TEXT,
     job_title TEXT,
     soc_code TEXT,
@@ -33,3 +33,4 @@ CREATE INDEX IF NOT EXISTS idx_h1b_job_title ON h1b_wages(job_title);
 CREATE INDEX IF NOT EXISTS idx_h1b_employer ON h1b_wages(employer_name);
 CREATE INDEX IF NOT EXISTS idx_h1b_worksite_state ON h1b_wages(worksite_state);
 CREATE INDEX IF NOT EXISTS idx_h1b_worksite_city ON h1b_wages(worksite_city);
+CREATE INDEX IF NOT EXISTS idx_h1b_wage_from ON h1b_wages(wage_rate_of_pay_from);

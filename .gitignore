@@ -5,12 +5,25 @@ output_filtered*.csv
 # Node
 node_modules/
 
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
 # OS
 .DS_Store
 
 # SQLite DB (regenerate with scripts/create_db.py)
 h1b_wages.db
 h1b_wages_export.sql
+h1b_wages_prod_replace.sql
+
+# Data parsing outputs
+job_title_changes.json
+job_title_cleanup_preview.txt
 
 # wrangler files
 .wrangler
@@ -20,4 +33,8 @@ h1b_wages_export.sql
 !.env.example
 *test*.html
 *.txt
-
+*.xlsxß
+LCA_Disclosure_Data_*.xlsx
+pairs_kv_bulk.json
+employer_name_changes.json
+distinct_employer_job_pairs.txt

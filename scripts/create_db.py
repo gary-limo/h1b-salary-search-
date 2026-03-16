@@ -1,134 +1,175 @@
 #!/usr/bin/env python3
-"""Create SQLite database and load H1B wage data for Cloudflare D1 migration."""
+"""
+Build local D1 database from parsed_output.csv.
+
+Flow:
+  1. Generate h1b_wages_export.sql (INSERT statements) from parsed_output.csv
+  2. Flush local D1 (drop h1b_wages and related tables)
+  3. Create schema + load data + indexes via wrangler
+  4. Export distinct employer|job_title pairs to distinct_employer_job_pairs.txt
+
+No intermediate h1b_wages.db is created. Local D1 is the single source of truth.
+"""
 
 import csv
+import glob
+import os
 import sqlite3
-from pathlib import Path
+import subprocess
+import sys
+import uuid
 
-DB_PATH = Path(__file__).resolve().parent.parent / "h1b_wages.db"
-CSV_PATH = Path(__file__).resolve().parent.parent / "parsed_output.csv"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
+CSV_PATH = os.path.join(PROJECT_DIR, "parsed_output.csv")
+EXPORT_SQL_PATH = os.path.join(PROJECT_DIR, "h1b_wages_export.sql")
+PAIRS_PATH = os.path.join(PROJECT_DIR, "distinct_employer_job_pairs.txt")
+DB_NAME = "h1b-wages"
 
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS h1b_wages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    case_number TEXT,
-    job_title TEXT,
-    soc_code TEXT,
-    soc_title TEXT,
-    begin_date TEXT,
-    end_date TEXT,
-    employer_name TEXT,
-    employer_address1 TEXT,
-    employer_address2 TEXT,
-    employer_city TEXT,
-    employer_state TEXT,
-    employer_postal_code TEXT,
-    employer_country TEXT,
-    worksite_address1 TEXT,
-    worksite_address2 TEXT,
-    worksite_city TEXT,
-    worksite_county TEXT,
-    worksite_state TEXT,
-    worksite_postal_code TEXT,
-    wage_rate_of_pay_from REAL,
-    wage_rate_of_pay_to REAL,
-    prevailing_wage REAL,
-    pw_wage_level TEXT
-);
+WRANGLER_D1_DIR = os.path.join(
+    PROJECT_DIR, ".wrangler", "state", "v3", "d1", "miniflare-D1DatabaseObject"
+)
 
-CREATE INDEX IF NOT EXISTS idx_h1b_case_number ON h1b_wages(case_number);
-CREATE INDEX IF NOT EXISTS idx_h1b_job_title ON h1b_wages(job_title);
-CREATE INDEX IF NOT EXISTS idx_h1b_employer ON h1b_wages(employer_name);
-CREATE INDEX IF NOT EXISTS idx_h1b_worksite_state ON h1b_wages(worksite_state);
-CREATE INDEX IF NOT EXISTS idx_h1b_wage_from ON h1b_wages(wage_rate_of_pay_from);
-CREATE INDEX IF NOT EXISTS idx_h1b_begin_date ON h1b_wages(begin_date);
-"""
+CSV_COLUMNS = [
+    "CASE_NUMBER", "JOB_TITLE", "SOC_CODE", "SOC_TITLE",
+    "BEGIN_DATE", "END_DATE",
+    "EMPLOYER_NAME", "EMPLOYER_ADDRESS1", "EMPLOYER_ADDRESS2",
+    "EMPLOYER_CITY", "EMPLOYER_STATE", "EMPLOYER_POSTAL_CODE", "EMPLOYER_COUNTRY",
+    "WORKSITE_ADDRESS1", "WORKSITE_ADDRESS2", "WORKSITE_CITY", "WORKSITE_COUNTY",
+    "WORKSITE_STATE", "WORKSITE_POSTAL_CODE",
+    "WAGE_RATE_OF_PAY_FROM", "WAGE_RATE_OF_PAY_TO", "PREVAILING_WAGE", "PW_WAGE_LEVEL",
+]
 
-INSERT_SQL = """
-INSERT INTO h1b_wages (
-    case_number, job_title, soc_code, soc_title,
-    begin_date, end_date,
-    employer_name, employer_address1, employer_address2,
-    employer_city, employer_state, employer_postal_code, employer_country,
-    worksite_address1, worksite_address2, worksite_city, worksite_county,
-    worksite_state, worksite_postal_code,
-    wage_rate_of_pay_from, wage_rate_of_pay_to, prevailing_wage, pw_wage_level
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-"""
+DB_COLUMNS = [
+    "case_number", "job_title", "soc_code", "soc_title",
+    "begin_date", "end_date",
+    "employer_name", "employer_address1", "employer_address2",
+    "employer_city", "employer_state", "employer_postal_code", "employer_country",
+    "worksite_address1", "worksite_address2", "worksite_city", "worksite_county",
+    "worksite_state", "worksite_postal_code",
+    "wage_rate_of_pay_from", "wage_rate_of_pay_to", "prevailing_wage", "pw_wage_level",
+]
+
+FLOAT_COLUMNS = {"WAGE_RATE_OF_PAY_FROM", "WAGE_RATE_OF_PAY_TO", "PREVAILING_WAGE"}
 
 
-def parse_float(value: str) -> float | None:
-    if not value or value.strip() == "":
-        return None
-    try:
-        return float(value.replace(",", ""))
-    except ValueError:
-        return None
-
-
-def clean(value: str) -> str | None:
+def sql_escape(value):
+    """Escape a string value for SQL. Returns 'NULL' for empty/None."""
+    if value is None:
+        return "NULL"
     v = value.strip()
-    return v if v else None
+    if not v:
+        return "NULL"
+    return "'" + v.replace("'", "''") + "'"
+
+
+def format_value(csv_col, raw_value):
+    """Format a CSV value for SQL insertion."""
+    if csv_col in FLOAT_COLUMNS:
+        if not raw_value or not raw_value.strip():
+            return "NULL"
+        try:
+            return str(float(raw_value.replace(",", "")))
+        except ValueError:
+            return "NULL"
+    return sql_escape(raw_value)
+
+
+def run_wrangler(args, description=""):
+    """Run a wrangler command and check for errors."""
+    cmd = ["npx", "wrangler", "d1", "execute", DB_NAME, "--local"] + args
+    print(f"  {description}")
+    result = subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"  ERROR: {result.stderr.strip()}")
+        sys.exit(1)
+    return result.stdout
+
+
+def find_local_d1_db():
+    """Find the local D1 SQLite file under .wrangler/state/."""
+    pattern = os.path.join(WRANGLER_D1_DIR, "*.sqlite")
+    matches = glob.glob(pattern)
+    if not matches:
+        return None
+    if len(matches) > 1:
+        print(f"WARNING: Multiple local D1 SQLite files found, using first: {matches[0]}")
+    return matches[0]
 
 
 def main():
-    print(f"Creating database at {DB_PATH}")
+    if not os.path.exists(CSV_PATH):
+        print(f"Error: {CSV_PATH} not found. Run data_parsing.py first.")
+        sys.exit(1)
 
-    if DB_PATH.exists():
-        DB_PATH.unlink()
+    # Step 1: Generate h1b_wages_export.sql from parsed_output.csv
+    print("Step 1/4: Generating h1b_wages_export.sql from parsed_output.csv...")
+    cols_str = "id, " + ", ".join(DB_COLUMNS)
+    row_count = 0
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.executescript(SCHEMA_SQL)
-
-    with open(CSV_PATH, "r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-
-        count = 0
-        batch = []
-        batch_size = 10000
-
+    with open(CSV_PATH, "r", encoding="utf-8", newline="") as csvfile, \
+         open(EXPORT_SQL_PATH, "w", encoding="utf-8") as sqlfile:
+        reader = csv.DictReader(csvfile)
         for row in reader:
-            batch.append((
-                clean(row.get("CASE_NUMBER", "")),
-                clean(row.get("JOB_TITLE", "")),
-                clean(row.get("SOC_CODE", "")),
-                clean(row.get("SOC_TITLE", "")),
-                clean(row.get("BEGIN_DATE", "")),
-                clean(row.get("END_DATE", "")),
-                clean(row.get("EMPLOYER_NAME", "")),
-                clean(row.get("EMPLOYER_ADDRESS1", "")),
-                clean(row.get("EMPLOYER_ADDRESS2", "")),
-                clean(row.get("EMPLOYER_CITY", "")),
-                clean(row.get("EMPLOYER_STATE", "")),
-                clean(row.get("EMPLOYER_POSTAL_CODE", "")),
-                clean(row.get("EMPLOYER_COUNTRY", "")),
-                clean(row.get("WORKSITE_ADDRESS1", "")),
-                clean(row.get("WORKSITE_ADDRESS2", "")),
-                clean(row.get("WORKSITE_CITY", "")),
-                clean(row.get("WORKSITE_COUNTY", "")),
-                clean(row.get("WORKSITE_STATE", "")),
-                clean(row.get("WORKSITE_POSTAL_CODE", "")),
-                parse_float(row.get("WAGE_RATE_OF_PAY_FROM", "")),
-                parse_float(row.get("WAGE_RATE_OF_PAY_TO", "")),
-                parse_float(row.get("PREVAILING_WAGE", "")),
-                clean(row.get("PW_WAGE_LEVEL", "")),
-            ))
+            row_id = sql_escape(str(uuid.uuid4()))
+            values = ", ".join(format_value(col, row.get(col, "")) for col in CSV_COLUMNS)
+            sqlfile.write(f"INSERT INTO h1b_wages ({cols_str}) VALUES ({row_id}, {values});\n")
+            row_count += 1
+            if row_count % 50000 == 0:
+                print(f"  Generated {row_count:,} INSERT statements...")
 
-            if len(batch) >= batch_size:
-                conn.executemany(INSERT_SQL, batch)
-                count += len(batch)
-                print(f"  Inserted {count:,} rows...")
-                batch = []
+    sql_size_mb = os.path.getsize(EXPORT_SQL_PATH) / 1024 / 1024
+    print(f"  Done: {row_count:,} rows -> {EXPORT_SQL_PATH} ({sql_size_mb:.1f} MB)")
 
-        if batch:
-            conn.executemany(INSERT_SQL, batch)
-            count += len(batch)
+    # Step 2: Flush and seed local D1
+    print("\nStep 2/4: Flushing and seeding local D1...")
+    run_wrangler(
+        ["--command", "DROP TABLE IF EXISTS h1b_wages;"],
+        "Dropping existing tables..."
+    )
+    run_wrangler(
+        ["--file=./migrations/0001_create_h1b_wages.sql"],
+        "Creating h1b_wages schema..."
+    )
+    run_wrangler(
+        [f"--file={EXPORT_SQL_PATH}"],
+        f"Loading {row_count:,} rows (this may take a few minutes)..."
+    )
+    run_wrangler(
+        ["--file=./migrations/0001d_composite_indexes.sql"],
+        "Creating composite indexes..."
+    )
 
-    conn.commit()
-    total = conn.execute("SELECT COUNT(*) FROM h1b_wages").fetchone()[0]
-    print(f"Done. Total records in h1b_wages: {total:,}")
-    conn.close()
-    print(f"Database saved to {DB_PATH}")
+    # Verify
+    run_wrangler(
+        ["--command", "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages;"],
+        "Verifying row count..."
+    )
+
+    # Step 4: Export distinct employer-job pairs from local D1
+    print("\nStep 4/4: Exporting distinct employer-job pairs...")
+    local_db = find_local_d1_db()
+    if not local_db:
+        print("  WARNING: Could not find local D1 SQLite file. Skipping pairs export.")
+        print("  Run 'npm run dev' once to initialize .wrangler/state, then re-run this script.")
+    else:
+        conn = sqlite3.connect(local_db)
+        cur = conn.execute(
+            "SELECT employer_name, job_title FROM h1b_wages "
+            "GROUP BY employer_name, job_title ORDER BY employer_name, job_title"
+        )
+        pair_count = 0
+        with open(PAIRS_PATH, "w", encoding="utf-8") as f:
+            for emp, job in cur:
+                emp = (emp or "").replace("|", " ")
+                job = (job or "").replace("|", " ")
+                if emp or job:
+                    f.write(f"{emp}|{job}\n")
+                    pair_count += 1
+        conn.close()
+        print(f"  Done: {pair_count:,} distinct pairs -> {os.path.basename(PAIRS_PATH)}")
+
+    print("\nLocal D1 is ready. Run: npm run dev")
 
 
 if __name__ == "__main__":

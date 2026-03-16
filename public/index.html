@@ -112,6 +112,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .load-text{font-size:11px;color:rgba(255,255,255,.5)}
 .load-pct{font-size:11px;color:#B8A062;font-weight:600;font-variant-numeric:tabular-nums}
 
+
 .popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;position:relative;z-index:1}
 .popular-label{font-size:11px;color:rgba(255,255,255,.35);align-self:center;margin-right:2px}
 .popular-btn{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;transition:all .15s}
@@ -234,9 +235,7 @@ th.th-filterable{position:relative}
 <nav>
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
-  <span class="nav-tagline">
-    <a href="/compare" class="nav-link hidden">Compare Wages</a>
-  </span>
+  <span class="nav-tagline">Search H-1B wages by employer, job, location</span>
 </nav>
 
 <section class="hero">
@@ -333,13 +332,13 @@ th.th-filterable{position:relative}
 </footer>
 
 <script>
+const API_TOKEN = document.querySelector('meta[name="api-token"]')?.content || '';
 const DEFAULT_PAGE_SIZE = 15;
 const PAGE_SIZE_OPTIONS = [15, 25, 50, 75];
-const MAX_FETCH_SIZE    = 10000;
 
 const POPULAR = [
   { label: "Google",            employer: "Google LLC",               job: "",                  loc: "" },
-  { label: "Amazon",            employer: "Amazon.com Services LLC",  job: "",                  loc: "" },
+  { label: "Amazon",            employer: "Amazon com Services LLC",  job: "",                  loc: "" },
   { label: "Microsoft",         employer: "Microsoft Corporation",    job: "",                  loc: "" },
   { label: "Meta Platforms",    employer: "Meta Platforms Inc",       job: "",                  loc: "" },
   { label: "Apple",             employer: "Apple Inc",                job: "",                  loc: "" },
@@ -367,8 +366,7 @@ let hasSearched     = false;
 let sortCol         = "wage_rate_of_pay_from";
 let sortDir         = "DESC";
 
-let cachedResults  = [];
-let cacheKey       = "";
+let pageResults    = [];
 let filterEmp      = "";
 let filterJob      = "";
 let filterLoc      = "";
@@ -379,10 +377,6 @@ const $ = (id) => document.getElementById(id);
 const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput");
 const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), locFieldInner = $("locFieldInner");
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
-
-function getCacheKey(emp, job, loc) {
-  return `${emp}|${job}|${loc}|${sortCol}|${sortDir}`;
-}
 
 function applyResultFilters(records) {
   const emp  = filterEmp.trim().toLowerCase();
@@ -397,20 +391,21 @@ function applyResultFilters(records) {
   });
 }
 
-async function ensureCacheLoaded(emp, job, loc) {
-  if (cachedResults.length > 0) return;
+async function fetchPage(emp, job, loc) {
   const params = new URLSearchParams({
     employer: emp.trim(), job: job.trim(), location: loc.trim(),
-    page: 1, pageSize: MAX_FETCH_SIZE, sort: sortCol, dir: sortDir,
+    page: currentPage, pageSize: currentPageSize, sort: sortCol, dir: sortDir,
   });
-  const res = await fetch(`/api/search?${params}`);
+  const res = await fetch(`/api/search?${params}`, {
+    headers: API_TOKEN ? { "X-API-Token": API_TOKEN } : {},
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Request failed (${res.status})`);
   }
   const data = await res.json();
-  totalCount    = data.total ?? 0;
-  cachedResults = data.results || [];
+  totalCount  = data.total ?? 0;
+  pageResults = data.results || [];
 }
 
 
@@ -418,7 +413,8 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
 function fmtUSD(v) { return v == null ? "\u2014" : usd.format(v); }
 function fmtLoc(r) {
   const city = r.worksite_city ? toTitleCase(r.worksite_city) : null;
-  const parts = [city, r.worksite_state].filter(Boolean);
+  const state = r.worksite_state ? String(r.worksite_state).toUpperCase() : null;
+  const parts = [city, state].filter(Boolean);
   return parts.join(", ") || "\u2014";
 }
 function html(s) {
@@ -437,7 +433,7 @@ function renderTable(records, isFilterEmpty) {
   const emptyMsg = isFilterEmpty ? "No matching records. Clear or change your filter above." : "No records found. Try a different search.";
   const rows = recs.length
     ? recs.map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
-    <td class="emp"><a href="/record?id=${html(r.id)}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a></td>
+    <td class="emp"><a href="/record?id=${encodeURIComponent(r.id || "")}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(toTitleCase(r.employer_name))}</a></td>
     <td class="job">${html(toTitleCase(r.job_title))}</td>
     <td class="salary">${fmtUSD(r.wage_rate_of_pay_from)}</td>
     <td class="loc">${html(fmtLoc(r))}</td>
@@ -447,7 +443,7 @@ function renderTable(records, isFilterEmpty) {
     : `<tr><td colspan="6" class="no-filter-match">${emptyMsg}</td></tr>`;
 
   const cards = recs.length ? recs.map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
-    <a href="/record?id=${html(r.id)}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(r.employer_name)}</a>
+    <a href="/record?id=${encodeURIComponent(r.id || "")}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(toTitleCase(r.employer_name))}</a>
     <div class="rc-job">${html(toTitleCase(r.job_title))}</div>
     <div class="rc-grid">
       <div><div class="rc-label">Base Salary</div><div class="rc-val money">${fmtUSD(r.wage_rate_of_pay_from)}</div></div>
@@ -565,7 +561,7 @@ function bindFilterIcons() {
       else if (col === "worksite_state") filterLoc = input.value;
       openFilterCol = col;
       clearTimeout(filterDebounce);
-      filterDebounce = setTimeout(() => { currentPage = 1; runPage(); }, 200);
+      filterDebounce = setTimeout(() => renderCurrentResults(), 200);
     });
     input.addEventListener("click", (e) => e.stopPropagation());
     input.addEventListener("keydown", (e) => {
@@ -584,8 +580,7 @@ function bindFilterIcons() {
       else if (col === "job_title") filterJob = "";
       else if (col === "worksite_state") filterLoc = "";
       openFilterCol = "";
-      currentPage = 1;
-      runPage();
+      renderCurrentResults();
     });
   });
 
@@ -619,51 +614,48 @@ function bindSortHeaders() {
 function bindRowClicks() {
   $("tableContainer").querySelectorAll("tr.clickable[data-id]").forEach(tr => {
     tr.addEventListener("click", () => {
-      window.open(`/record?id=${tr.dataset.id}`, "_blank");
+      window.open(`/record?id=${encodeURIComponent(tr.dataset.id || "")}`, "_blank");
     });
   });
   document.querySelectorAll(".result-card.clickable[data-id]").forEach(card => {
     card.addEventListener("click", () => {
-      window.open(`/record?id=${card.dataset.id}`, "_blank");
+      window.open(`/record?id=${encodeURIComponent(card.dataset.id || "")}`, "_blank");
     });
   });
 }
 
+function renderCurrentResults() {
+  const filtered = applyResultFilters(pageResults);
+  const filteredCount = filtered.length;
+  const hasColumnFilter = !!(filterEmp || filterJob || filterLoc);
+
+  $("tableContainer").innerHTML = renderTable(filtered, filteredCount === 0 && hasColumnFilter);
+  $("tableContainer").classList.remove("hidden");
+
+  if (hasColumnFilter) {
+    $("resultsBadge").textContent = `${filteredCount} of ${pageResults.length} on page \u00b7 ${totalCount.toLocaleString()} total`;
+  } else {
+    $("resultsBadge").textContent = `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
+  }
+
+  if (totalCount === 0) {
+    $("noResults").classList.remove("hidden");
+    $("noResults").textContent = "No records found. Try a different search.";
+  } else {
+    $("noResults").classList.add("hidden");
+  }
+
+  renderPager(totalCount);
+  bindSortHeaders();
+  bindFilterIcons();
+  bindRowClicks();
+}
+
 async function runPage() {
   const emp = empInput.value.trim(), job = jobInput.value.trim(), loc = locInput.value.trim();
-  const key = getCacheKey(emp, job, loc);
-  if (key !== cacheKey) {
-    cacheKey = key;
-    cachedResults = [];
-  }
   try {
-    await ensureCacheLoaded(emp, job, loc);
-    const filtered = applyResultFilters(cachedResults);
-    const filteredCount = filtered.length;
-    const start = (currentPage - 1) * currentPageSize;
-    const records = filtered.slice(start, start + currentPageSize);
-
-    const isFilterEmpty = filteredCount === 0 && !!(filterEmp || filterJob || filterLoc);
-    $("tableContainer").innerHTML = renderTable(records, isFilterEmpty);
-    $("tableContainer").classList.remove("hidden");
-    $("resultsBadge").textContent = filteredCount === totalCount && !filterEmp && !filterJob && !filterLoc
-      ? `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`
-      : `${filteredCount.toLocaleString()} of ${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
-    if (filteredCount === 0) {
-      const isFilterEmpty = !!(filterEmp || filterJob || filterLoc);
-      if (isFilterEmpty) {
-        $("noResults").classList.add("hidden");
-      } else {
-        $("noResults").classList.remove("hidden");
-        $("noResults").textContent = "No records found. Try a different search.";
-      }
-    } else {
-      $("noResults").classList.add("hidden");
-    }
-    renderPager(filteredCount);
-    bindSortHeaders();
-    bindFilterIcons();
-    bindRowClicks();
+    await fetchPage(emp, job, loc);
+    renderCurrentResults();
   } catch (err) {
     $("errorMsg").textContent = err.message || "Search failed.";
     $("errorBox").classList.remove("hidden");
@@ -817,7 +809,7 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
   const otherFieldInner = $(selectedField === "employer" ? "jobFieldInner" : "empFieldInner");
   if (!pqReady || !pqConn) return;
 
-  otherDD.innerHTML = '<div class="dropdown-loading">Loading\u2026</div>';
+  otherDD.innerHTML = '<div class="dropdown-loading">Loading…</div>';
   otherDD.className = "dropdown open";
   otherFieldInner.classList.add("focused");
 
@@ -856,38 +848,59 @@ async function initParquetSuggestions() {
     const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
 
     $("loadProgress").classList.add("show");
-    setProgress(5, "Initializing suggestions\u2026");
+    setProgress(5, "Initializing suggestions…");
 
     const bundle = await duckdb.selectBundle({
       mvp: { mainModule: `${CDN}/duckdb-mvp.wasm`, mainWorker: `${CDN}/duckdb-browser-mvp.worker.js` },
       eh: { mainModule: `${CDN}/duckdb-eh.wasm`, mainWorker: `${CDN}/duckdb-browser-eh.worker.js` },
     });
-    setProgress(15, "Loading engine\u2026");
+    setProgress(15, "Loading engine…");
     const worker = await duckdb.createWorker(bundle.mainWorker);
     const logger = { log(){}, warn(){}, error(){}, info(){}, debug(){} };
     const db = new duckdb.AsyncDuckDB(logger, worker);
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
     pqConn = await db.connect();
-    setProgress(25, "Downloading suggestion data\u2026");
+    setProgress(25, "Downloading suggestion data…");
 
-    const res = await fetch("pairs_v2.parquet");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const total = Number(res.headers.get("content-length")) || 0;
-    let loaded = 0;
-    const reader = res.body.getReader();
-    const chunks = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      loaded += value.length;
-      if (total) setProgress(25 + (loaded / total) * 60, `Downloading\u2026 ${(loaded / 1048576).toFixed(1)}MB`);
+    const PARQUET_URL = "pairs_v2.parquet?v=260315";
+    const PARQUET_CACHE = "h1b-parquet-260315";
+    let buf;
+    try {
+      const cache = await caches.open(PARQUET_CACHE);
+      const cached = await cache.match(PARQUET_URL);
+      if (cached) {
+        setProgress(25, "Loading cached suggestions…");
+        const ab = await cached.arrayBuffer();
+        buf = new Uint8Array(ab);
+        setProgress(85, "Loaded from cache");
+      } else {
+        const res = await fetch(PARQUET_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const total = Number(res.headers.get("content-length")) || 0;
+        let loaded = 0;
+        const reader = res.body.getReader();
+        const chunks = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.length;
+          if (total) setProgress(25 + (loaded / total) * 60, `Downloading… ${(loaded / 1048576).toFixed(1)}MB`);
+        }
+        buf = new Uint8Array(loaded);
+        let off = 0;
+        for (const chunk of chunks) { buf.set(chunk, off); off += chunk.length; }
+        await cache.put(PARQUET_URL, new Response(buf.slice().buffer, { headers: { "Content-Type": "application/octet-stream" } }));
+      }
+    } catch (cacheErr) {
+      console.warn("Cache API unavailable, fetching directly:", cacheErr);
+      const res = await fetch(PARQUET_URL);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ab = await res.arrayBuffer();
+      buf = new Uint8Array(ab);
     }
-    const buf = new Uint8Array(loaded);
-    let offset = 0;
-    for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
 
-    setProgress(88, "Building suggestion index\u2026");
+    setProgress(88, "Building suggestion index…");
     await db.registerFileBuffer("pairs_v2.parquet", buf);
     await pqConn.query("CREATE TABLE pairs AS SELECT * FROM read_parquet('pairs_v2.parquet')");
 
@@ -925,7 +938,6 @@ function acSetup(input, dropdownId, field) {
   let highlighted = -1;
   const usePq = field === "employer" || field === "job";
   const pqCol = field === "employer" ? "employer" : "job";
-
   function closeDD() {
     dd.className = "dropdown";
     dd.innerHTML = "";
@@ -984,22 +996,15 @@ function acSetup(input, dropdownId, field) {
           }
         } catch { closeDD(); }
       }, 120);
-    } else {
-      const ctx = acGetContext(field);
-      const hasCtx = Object.keys(ctx).length > 0;
+    } else if (usePq) {
+      // employer/job: parquet not ready — no API fallback, show loading or close
+      const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
       if (!hasCtx && q.length < 2) { closeDD(); return; }
-      dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
+      dd.innerHTML = '<div class="dropdown-loading">Loading suggestions…</div>';
       dd.className = "dropdown open";
-      clearTimeout(acTimers[field]);
-      acTimers[field] = setTimeout(async () => {
-        try {
-          const params = new URLSearchParams({ field, q, ...ctx });
-          const res = await fetch(`/api/suggest?${params}`);
-          const data = await res.json();
-          renderItems(data.results || []);
-        } catch { closeDD(); }
-      }, q.length === 0 ? 0 : 250);
+      return;
     }
+    // Location: no autocomplete; users type the city directly
   }
 
   input.addEventListener("input", () => {

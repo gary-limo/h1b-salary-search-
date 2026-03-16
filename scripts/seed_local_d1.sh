@@ -36,15 +36,11 @@ npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c1_job_title_
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c2_data_quality_part2.sql
 
 echo ""
-echo "Step 4/6: Creating suggest tables..."
-npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001b_create_fts.sql
-
-echo ""
-echo "Step 5/6: Creating h1b_salary_compare table..."
+echo "Step 4/5: Creating h1b_salary_compare table..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0002_create_salary_compare.sql
 
 echo ""
-echo "Step 6/6: Verifying..."
+echo "Step 5/5: Verifying..."
 npx wrangler d1 execute "$DB_NAME" --local --command "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages UNION ALL SELECT 'h1b_salary_compare', COUNT(*) FROM h1b_salary_compare UNION ALL SELECT 'h1b_salary_summary', COUNT(*) FROM h1b_salary_summary;"
 
 echo ""
