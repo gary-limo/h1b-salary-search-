@@ -17,17 +17,26 @@ const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 
 const SUGGESTIONS_INDEX_KEY = "suggestions_index.json";
 const MAX_SUGGEST_RESULTS = 100;
+const SUGGESTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min: R2 updates visible without stale data
 
 let suggestionsIndexCache = null;
+let suggestionsIndexFetchedAt = 0;
 
 async function getSuggestionsIndex(env, request) {
-  if (suggestionsIndexCache) return suggestionsIndexCache;
+  const now = Date.now();
+  if (suggestionsIndexCache && now - suggestionsIndexFetchedAt < SUGGESTIONS_CACHE_TTL_MS) {
+    return suggestionsIndexCache;
+  }
+  suggestionsIndexCache = null;
+  suggestionsIndexFetchedAt = 0;
+
   if (env.SUGGESTIONS_INDEX) {
     try {
       const obj = await env.SUGGESTIONS_INDEX.get(SUGGESTIONS_INDEX_KEY);
       if (obj && obj.body) {
         const body = await obj.arrayBuffer();
         suggestionsIndexCache = JSON.parse(new TextDecoder().decode(body));
+        suggestionsIndexFetchedAt = now;
         return suggestionsIndexCache;
       }
     } catch (e) {
@@ -40,6 +49,7 @@ async function getSuggestionsIndex(env, request) {
       const res = await env.ASSETS.fetch(assetUrl.toString());
       if (res.ok) {
         suggestionsIndexCache = await res.json();
+        suggestionsIndexFetchedAt = now;
         return suggestionsIndexCache;
       }
     } catch (e) {

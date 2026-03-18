@@ -15,6 +15,6 @@ if [[ ! -f "$FILE" ]]; then
   exit 1
 fi
 
-echo "Uploading $FILE to R2 ${BUCKET}/${KEY}..."
-npx wrangler r2 object put "${BUCKET}/${KEY}" --file="$FILE" --content-type="application/json"
+echo "Uploading $FILE to R2 ${BUCKET}/${KEY} (remote/prod)..."
+npx wrangler r2 object put "${BUCKET}/${KEY}" --file="$FILE" --content-type="application/json" --remote
 echo "Done. Worker will load suggestions from R2 on next request."
