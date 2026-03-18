@@ -64,11 +64,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .skeleton{background:#E2DDD6;border-radius:4px;animation:pulse 1.5s ease infinite}
 
+.skip-link{position:absolute;top:-100%;left:16px;background:#1B2A4A;color:#fff;padding:8px 16px;border-radius:0 0 8px 8px;font-size:13px;font-weight:600;z-index:999;text-decoration:none;transition:top .15s}
+.skip-link:focus{top:0}
+:focus-visible{outline:2px solid #B8A062;outline-offset:2px}
+button:focus-visible,.btn-search:focus-visible,.btn-clear:focus-visible,.popular-btn:focus-visible,.pager-btn:focus-visible,.empty-state-btn:focus-visible{outline:2px solid #B8A062;outline-offset:2px}
+tr.clickable:focus-visible{outline:2px solid #B8A062;outline-offset:-2px}
+.dropdown-item:focus-visible{background:rgba(184,160,98,.12);outline:none}
 nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(184,160,98,.2);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px}
 .nav-dot{width:8px;height:8px;border-radius:50%;background:#B8A062;box-shadow:0 0 6px #B8A062;margin-right:0}
 .nav-title{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.3px}
 .nav-accent{color:#B8A062}
-.nav-tagline{color:rgba(255,255,255,.6);font-size:12px;font-weight:400;letter-spacing:.2px}
+.nav-tagline{color:rgba(255,255,255,.75);font-size:12px;font-weight:400;letter-spacing:.2px}
 .nav-link{color:#B8A062;text-decoration:none;font-weight:500}
 .nav-link:hover{color:#fff;text-decoration:underline}
 .nav-sep{color:rgba(255,255,255,.2);font-size:12px}
@@ -94,7 +100,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .dropdown-item{padding:8px 14px;font-size:13px;color:#1B2A4A;cursor:pointer;transition:background .1s}
 .dropdown-item:hover,.dropdown-item.ac-highlighted{background:rgba(184,160,98,.08)}
 .dropdown-item+.dropdown-item{border-top:1px solid #F0ECE8}
-.dropdown-loading{padding:10px 14px;font-size:12px;color:#9CA3AF;display:flex;align-items:center;gap:6px}
+.dropdown-loading{padding:10px 14px;font-size:12px;color:#6B7280;display:flex;align-items:center;gap:6px}
 
 .btn-row{display:flex;gap:8px;position:relative}
 .btn-search{flex:1;height:42px;background:#C41E3A;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;letter-spacing:-.2px}
@@ -109,13 +115,13 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .load-bar-wrap{height:6px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden}
 .load-bar{height:100%;width:0%;background:linear-gradient(90deg,#B8A062,#D4C495);border-radius:99px;transition:width .2s ease}
 .load-status{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
-.load-text{font-size:11px;color:rgba(255,255,255,.5)}
+.load-text{font-size:11px;color:rgba(255,255,255,.7)}
 .load-pct{font-size:11px;color:#B8A062;font-weight:600;font-variant-numeric:tabular-nums}
 
 
 .popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;position:relative;z-index:1}
-.popular-label{font-size:11px;color:rgba(255,255,255,.35);align-self:center;margin-right:2px}
-.popular-btn{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;transition:all .15s}
+.popular-label{font-size:11px;color:rgba(255,255,255,.65);align-self:center;margin-right:2px}
+.popular-btn{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,.25);background:transparent;color:rgba(255,255,255,.75);font-size:13px;cursor:pointer;transition:all .15s}
 .popular-btn:hover{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(184,160,98,.4)}
 
 .wave{position:absolute;bottom:-1px;left:0;right:0;pointer-events:none}
@@ -132,6 +138,7 @@ main{max-width:1080px;margin:0 auto;padding:28px 24px 40px;width:100%}
 
 .tbl-wrap{background:#fff;border-radius:12px;border:1px solid #E2DDD6;overflow:hidden;box-shadow:0 1px 4px rgba(27,42,74,.05);margin-top:10px}
 .tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tbl-scroll.settling{overflow-x:hidden}
 table{width:100%;border-collapse:collapse;white-space:nowrap}
 thead tr{background:#1B2A4A}
 th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:rgba(255,255,255,.85);letter-spacing:.4px;text-transform:uppercase;cursor:pointer;user-select:none;transition:color .1s}
@@ -158,7 +165,7 @@ td.job{white-space:normal;word-break:break-word;min-width:180px}
 .pager-left{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 .pager-info{font-size:13px;color:#5A6478;font-weight:500}
 .pager-size-wrap{display:flex;align-items:center;gap:6px}
-.pager-size-label{font-size:12px;color:#8896A6;white-space:nowrap}
+.pager-size-label{font-size:12px;color:#5A6A7A;white-space:nowrap}
 .pager-size-select{padding:6px 10px;border-radius:8px;border:1px solid #E2DDD6;background:#fff;color:#1B2A4A;font-size:13px;font-weight:600;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%235A6478' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
 .pager-size-select:hover{border-color:#B8A062}
 .pager-size-select:focus{outline:none;border-color:#B8A062;box-shadow:0 0 0 2px rgba(184,160,98,.2)}
@@ -178,19 +185,33 @@ th.th-filterable{position:relative}
 .th-filter-pop.open{display:block}
 .th-filter-pop input{width:100%;padding:7px 10px;border:1px solid #E2DDD6;border-radius:6px;font-size:13px;color:#1B2A4A;outline:none;font-family:inherit}
 .th-filter-pop input:focus{border-color:#B8A062;box-shadow:0 0 0 2px rgba(184,160,98,.15)}
-.th-filter-pop .fpop-clear{display:block;margin-top:6px;font-size:11px;color:#8896A6;background:none;border:none;cursor:pointer;padding:2px 0;text-align:left}
+.th-filter-pop .fpop-clear{display:block;margin-top:6px;font-size:11px;color:#5A6A7A;background:none;border:none;cursor:pointer;padding:2px 0;text-align:left}
 .th-filter-pop .fpop-clear:hover{color:#C41E3A}
 
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;color:#C41E3A}
-.no-results{text-align:center;padding:40px 24px;color:#9CA3AF;font-size:14px}
-.no-filter-match{padding:20px;text-align:center;color:#9CA3AF;font-size:13px}
+.empty-state{padding:32px 24px;text-align:center}
+.empty-state-msg{color:#4A5568;font-size:15px;font-weight:600;margin-bottom:6px}
+.empty-state-hint{color:#6B7280;font-size:13px;margin-bottom:14px}
+.empty-state-btn{padding:8px 18px;font-size:13px;font-weight:600;background:#1B2A4A;color:#fff;border:none;border-radius:8px;cursor:pointer;transition:background .15s}
+.empty-state-btn:hover{background:#243560}
+.no-filter-match{padding:20px;text-align:center;color:#6B7280;font-size:13px}
+.empty-state{padding:32px 24px;text-align:center}
+.empty-state-msg{font-size:15px;font-weight:600;color:#4A5568;margin-bottom:6px}
+.empty-state-hint{font-size:13px;color:#6B7280;margin-bottom:14px}
+.empty-state-btn{font-size:13px;font-weight:500;color:#B8A062;background:rgba(184,160,98,.1);border:1px solid rgba(184,160,98,.3);border-radius:8px;padding:8px 16px;cursor:pointer;transition:background .15s}
+.empty-state-btn:hover{background:rgba(184,160,98,.15)}
+.empty-state{padding:40px 24px;text-align:center}
+.empty-state-msg{color:#6B7280;font-size:15px;font-weight:500;margin-bottom:6px}
+.empty-state-hint{color:#6B7280;font-size:13px;margin-bottom:14px;line-height:1.4}
+.empty-state-btn{background:#1B2A4A;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s}
+.empty-state-btn:hover{background:#243560}
 .disclaimer{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(184,160,98,.06);border:1px solid rgba(184,160,98,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#000;line-height:1.5;text-align:center}
 .disclaimer strong{color:#000}
 
 .spinner{animation:spin 1s linear infinite}
 .hidden{display:none!important}
 
-.site-footer{text-align:center;padding:24px 16px 32px;font-size:12px;color:#8896A6}
+.site-footer{text-align:center;padding:24px 16px 32px;font-size:12px;color:#5A6A7A}
 .site-footer a{color:#B8A062;text-decoration:none;font-weight:500}
 .site-footer a:hover{text-decoration:underline;color:#1B2A4A}
 .footer-sep{margin:0 6px;color:#C0C7CF}
@@ -213,7 +234,7 @@ th.th-filterable{position:relative}
   .result-card .rc-emp.emp-link{color:#C41E3A;text-decoration:underline}
   .result-card .rc-job{color:#4A5568;font-size:13px;margin-bottom:8px}
   .result-card .rc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
-  .result-card .rc-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#8896A6;font-weight:600}
+  .result-card .rc-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#5A6A7A;font-weight:600}
   .result-card .rc-val{font-size:13px;color:#1B2A4A;font-weight:500}
   .result-card .rc-val.money{font-weight:700;font-variant-numeric:tabular-nums}
   .pager{flex-wrap:wrap;gap:8px;padding:12px}
@@ -232,59 +253,60 @@ th.th-filterable{position:relative}
 </style>
 </head>
 <body>
-<nav>
+<a href="#searchForm" class="skip-link">Skip to search</a>
+<nav aria-label="Main navigation">
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
   <span class="nav-tagline">Search H-1B wages by employer, job, location</span>
 </nav>
 
-<section class="hero">
+<section class="hero" aria-label="Search">
   <div style="max-width:720px;margin:0 auto;text-align:center">
     <h1>Salary <span class="accent">Explorer</span></h1>
 
-    <form id="searchForm" autocomplete="off" class="search-box">
+    <form id="searchForm" autocomplete="off" class="search-box" role="search" aria-label="Search H-1B salary records">
       <div class="search-grid">
         <div class="field-wrap">
           <div class="field-inner" id="empFieldInner">
             <div class="field-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M8 10h.01"/><path d="M16 10h.01"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
             </div>
-            <input class="field-input" id="empInput" type="text" placeholder="Employer (e.g. Apple Inc)" aria-label="Employer" autocomplete="off">
+            <input class="field-input" id="empInput" type="text" placeholder="Employer (e.g. Apple Inc)" aria-label="Employer" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="empDropdown">
           </div>
-          <div class="dropdown" id="empDropdown"></div>
+          <div class="dropdown" id="empDropdown" role="listbox"></div>
         </div>
         <div class="field-wrap">
           <div class="field-inner" id="jobFieldInner">
             <div class="field-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
             </div>
-            <input class="field-input" id="jobInput" type="text" placeholder="Job title" aria-label="Job title" autocomplete="off">
+            <input class="field-input" id="jobInput" type="text" placeholder="Job title" aria-label="Job title" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="jobDropdown">
           </div>
-          <div class="dropdown" id="jobDropdown"></div>
+          <div class="dropdown" id="jobDropdown" role="listbox"></div>
         </div>
         <div class="field-wrap">
           <div class="field-inner" id="locFieldInner">
             <div class="field-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
-            <input class="field-input" id="locInput" type="text" placeholder="Location (e.g. Seattle)" aria-label="Location" autocomplete="off">
+            <input class="field-input" id="locInput" type="text" placeholder="Location (e.g. Seattle)" aria-label="Location" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="locDropdown">
           </div>
-          <div class="dropdown" id="locDropdown"></div>
+          <div class="dropdown" id="locDropdown" role="listbox"></div>
         </div>
       </div>
       <div class="btn-row">
         <button type="submit" class="btn-search" id="searchBtn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <span id="searchBtnText">Search Salaries</span>
         </button>
-        <button type="button" class="btn-clear" id="clearBtn" title="Clear">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <button type="button" class="btn-clear" id="clearBtn" title="Clear" aria-label="Clear search fields">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
       <div class="load-progress" id="loadProgress">
         <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
         <div class="load-status">
-          <span class="load-text" id="loadText">Initializing suggestions…</span>
+          <span class="load-text" id="loadText" aria-live="polite">Initializing suggestions…</span>
           <span class="load-pct" id="loadPct">0%</span>
         </div>
       </div>
@@ -295,7 +317,7 @@ th.th-filterable{position:relative}
     </div>
   </div>
   <div class="wave">
-    <svg viewBox="0 0 1440 56" fill="none"><path d="M0 56L60 49C120 42 240 28 360 22.3C480 17 600 20 720 25.7C840 31 960 39 1080 42C1200 45 1320 42 1380 40.7L1440 39V56H0Z" fill="#FAFAF8"/></svg>
+    <svg viewBox="0 0 1440 56" fill="none" aria-hidden="true"><path d="M0 56L60 49C120 42 240 28 360 22.3C480 17 600 20 720 25.7C840 31 960 39 1080 42C1200 45 1320 42 1380 40.7L1440 39V56H0Z" fill="#FAFAF8"/></svg>
   </div>
 </section>
 
@@ -304,23 +326,22 @@ th.th-filterable{position:relative}
     <div class="section-hdr">
       <div class="section-bar"></div>
       <div class="section-title">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <h2>Search Results</h2>
       </div>
-      <span class="badge" id="resultsBadge"></span>
+      <span class="badge" id="resultsBadge" aria-live="polite"></span>
     </div>
-    <div id="errorBox" class="error-box hidden">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    <div id="errorBox" class="error-box hidden" role="alert" aria-live="assertive">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       <span id="errorMsg"></span>
     </div>
     <div id="skeletonTable"></div>
-    <div id="noResults" class="no-results hidden">No records found. Try a different search.</div>
-    <div id="tableContainer" class="hidden"></div>
+    <div id="tableContainer" class="hidden" aria-live="polite" aria-relevant="additions text"></div>
     <div id="pagerContainer" class="pager hidden"></div>
   </div>
 
   <div class="disclaimer">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B8A062" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B8A062" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
     <span><strong>Data source:</strong> U.S. Department of Labor H-1B LCA. Wages do not include benefits or bonuses. For reference only.</span>
   </div>
 </main>
@@ -428,9 +449,16 @@ function toTitleCase(s) {
   return s.replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function renderEmptyState(isFilterEmpty) {
+  if (isFilterEmpty) {
+    return `<div class="empty-state"><div class="empty-state-msg">No matching records.</div><div class="empty-state-hint">Clear or change your filter above.</div><button type="button" class="empty-state-btn" data-action="clear-filters">Clear Filters</button></div>`;
+  }
+  return `<div class="empty-state"><div class="empty-state-msg">No records found.</div><div class="empty-state-hint">Try different keywords or filters.</div><button type="button" class="empty-state-btn" data-action="clear-search">Clear Search</button></div>`;
+}
+
 function renderTable(records, isFilterEmpty) {
   const recs = records || [];
-  const emptyMsg = isFilterEmpty ? "No matching records. Clear or change your filter above." : "No records found. Try a different search.";
+  const emptyStateHtml = renderEmptyState(isFilterEmpty);
   const rows = recs.length
     ? recs.map((r, i) => `<tr class="clickable" data-id="${html(r.id)}" style="animation-delay:${i * 25}ms">
     <td class="emp"><a href="/record?id=${encodeURIComponent(r.id || "")}" class="emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(toTitleCase(r.employer_name))}</a></td>
@@ -440,7 +468,7 @@ function renderTable(records, isFilterEmpty) {
     <td class="date">${html(r.begin_date)}</td>
     <td class="date">${html(r.end_date)}</td>
   </tr>`).join("")
-    : `<tr><td colspan="6" class="no-filter-match">${emptyMsg}</td></tr>`;
+    : `<tr><td colspan="6" class="no-filter-match"><div class="empty-state-wrap">${emptyStateHtml}</div></td></tr>`;
 
   const cards = recs.length ? recs.map((r, i) => `<div class="result-card clickable" data-id="${html(r.id)}" style="animation-delay:${i * 30}ms;cursor:pointer">
     <a href="/record?id=${encodeURIComponent(r.id || "")}" class="rc-emp emp-link" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${html(toTitleCase(r.employer_name))}</a>
@@ -451,20 +479,20 @@ function renderTable(records, isFilterEmpty) {
       <div><div class="rc-label">Start</div><div class="rc-val">${html(r.begin_date)}</div></div>
       <div><div class="rc-label">End</div><div class="rc-val">${html(r.end_date)}</div></div>
     </div>
-  </div>`).join("") : "";
+  </div>`).join("") : emptyStateHtml;
 
-  const funnelSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
+  const funnelSvg = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`;
   const FILTERABLE = ["employer_name", "job_title", "worksite_state"];
   const ths = SORT_COLS.map(c => {
     const active = sortCol === c.key;
     const arrow  = active ? (sortDir === "ASC" ? "\u25B2" : "\u25BC") : "\u25B2";
     if (!FILTERABLE.includes(c.key)) {
-      return `<th class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
+      return `<th scope="col" class="${active ? "sorted" : ""}" data-col="${c.key}">${c.label}<span class="sort-arrow">${arrow}</span></th>`;
     }
     const fval    = c.key === "employer_name" ? filterEmp : c.key === "job_title" ? filterJob : filterLoc;
     const fActive = fval.trim() !== "";
     const safeVal = fval.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-    return `<th class="${active ? "sorted" : ""} th-filterable" data-col="${c.key}">` +
+    return `<th scope="col" class="${active ? "sorted" : ""} th-filterable" data-col="${c.key}">` +
       `<div class="th-inner"><span>${c.label}<span class="sort-arrow">${arrow}</span></span>` +
       `<button class="th-filter-btn${fActive ? " active" : ""}" data-fcol="${c.key}" aria-label="Filter ${c.label}" title="Filter ${c.label}">${funnelSvg}</button></div>` +
       `<div class="th-filter-pop" id="fpop-${c.key}">` +
@@ -613,14 +641,44 @@ function bindSortHeaders() {
 
 function bindRowClicks() {
   $("tableContainer").querySelectorAll("tr.clickable[data-id]").forEach(tr => {
-    tr.addEventListener("click", () => {
-      window.open(`/record?id=${encodeURIComponent(tr.dataset.id || "")}`, "_blank");
-    });
+    tr.setAttribute("tabindex", "0");
+    tr.setAttribute("role", "link");
+    const openRecord = () => window.open(`/record?id=${encodeURIComponent(tr.dataset.id || "")}`, "_blank");
+    tr.addEventListener("click", openRecord);
+    tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRecord(); } });
   });
   document.querySelectorAll(".result-card.clickable[data-id]").forEach(card => {
-    card.addEventListener("click", () => {
-      window.open(`/record?id=${encodeURIComponent(card.dataset.id || "")}`, "_blank");
-    });
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("role", "link");
+    const openRecord = () => window.open(`/record?id=${encodeURIComponent(card.dataset.id || "")}`, "_blank");
+    card.addEventListener("click", openRecord);
+    card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openRecord(); } });
+  });
+}
+
+function clearSearch() {
+  empInput.value = ""; jobInput.value = ""; locInput.value = "";
+  hasSearched = false; currentPage = 1; totalCount = 0;
+  $("resultsWrap").classList.remove("show");
+  updateClearBtn();
+}
+
+function clearColumnFilters() {
+  filterEmp = ""; filterJob = ""; filterLoc = "";
+  const pop = document.getElementById("fpop-" + openFilterCol);
+  if (pop) pop.classList.remove("open");
+  openFilterCol = "";
+  renderCurrentResults();
+}
+
+function bindEmptyStateButtons() {
+  const container = $("tableContainer");
+  if (!container) return;
+  container.querySelectorAll(".empty-state-btn[data-action='clear-search']").forEach(btn => {
+    btn.addEventListener("click", clearSearch);
+  });
+  container.querySelectorAll(".empty-state-btn[data-action='clear-filters']").forEach(btn => {
+    btn.addEventListener("click", clearColumnFilters);
   });
 }
 
@@ -630,6 +688,13 @@ function renderCurrentResults() {
   const hasColumnFilter = !!(filterEmp || filterJob || filterLoc);
 
   $("tableContainer").innerHTML = renderTable(filtered, filteredCount === 0 && hasColumnFilter);
+
+  const tblScroll = $("tableContainer").querySelector(".tbl-scroll");
+  if (tblScroll) {
+    tblScroll.classList.add("settling");
+    requestAnimationFrame(() => requestAnimationFrame(() => tblScroll.classList.remove("settling")));
+  }
+
   $("tableContainer").classList.remove("hidden");
 
   if (hasColumnFilter) {
@@ -638,28 +703,28 @@ function renderCurrentResults() {
     $("resultsBadge").textContent = `${totalCount.toLocaleString()} record${totalCount !== 1 ? "s" : ""}`;
   }
 
-  if (totalCount === 0) {
-    $("noResults").classList.remove("hidden");
-    $("noResults").textContent = "No records found. Try a different search.";
-  } else {
-    $("noResults").classList.add("hidden");
-  }
-
   renderPager(totalCount);
   bindSortHeaders();
   bindFilterIcons();
   bindRowClicks();
+  bindEmptyStateButtons();
 }
 
 async function runPage() {
   const emp = empInput.value.trim(), job = jobInput.value.trim(), loc = locInput.value.trim();
+
+  $("tableContainer").classList.add("hidden");
+  $("pagerContainer").classList.add("hidden");
+  $("skeletonTable").innerHTML = renderSkeleton();
+
   try {
     await fetchPage(emp, job, loc);
+    $("skeletonTable").innerHTML = "";
     renderCurrentResults();
   } catch (err) {
+    $("skeletonTable").innerHTML = "";
     $("errorMsg").textContent = err.message || "Search failed.";
     $("errorBox").classList.remove("hidden");
-    $("skeletonTable").innerHTML = "";
     $("resultsBadge").textContent = "0 records";
   }
 }
@@ -681,7 +746,6 @@ async function executeSearch() {
 
   $("resultsWrap").classList.add("show");
   $("errorBox").classList.add("hidden");
-  $("noResults").classList.add("hidden");
   $("tableContainer").classList.add("hidden");
   $("pagerContainer").classList.add("hidden");
   $("skeletonTable").innerHTML  = renderSkeleton();
@@ -689,7 +753,6 @@ async function executeSearch() {
 
   try {
     await runPage();
-    $("resultsWrap").scrollIntoView({ behavior: "smooth", block: "start" });
   } finally {
     searchBtn.disabled        = false;
     searchBtnText.textContent = "Search Salaries";
@@ -760,6 +823,23 @@ const acTimers = {};
 
 let pqConn = null;
 let pqReady = false;
+let apiSuggestReady = false;
+
+function apiSuggestHeaders() {
+  const h = { Accept: "application/json" };
+  if (API_TOKEN) h["X-API-Token"] = API_TOKEN;
+  return h;
+}
+
+async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
+  const params = new URLSearchParams({ field, q: q || "" });
+  if (contextEmployer) params.set("employer", contextEmployer);
+  if (contextJob) params.set("job", contextJob);
+  const res = await fetch(`/api/suggest?${params}`, { headers: apiSuggestHeaders() });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data.results) ? data.results : null;
+}
 
 function setProgress(pct, text) {
   const bar = $("loadBar"), pctEl = $("loadPct"), txtEl = $("loadText");
@@ -807,8 +887,39 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
   const otherDD = $(selectedField === "employer" ? "jobDropdown" : "empDropdown");
   const otherInput = selectedField === "employer" ? jobInput : empInput;
   const otherFieldInner = $(selectedField === "employer" ? "jobFieldInner" : "empFieldInner");
-  if (!pqReady || !pqConn) return;
 
+  if (apiSuggestReady) {
+    const ctxEmp = selectedField === "employer" ? selectedValue : undefined;
+    const ctxJob = selectedField === "job" ? selectedValue : undefined;
+    const items = await fetchApiSuggest(otherCol, "", ctxEmp, ctxJob);
+    if (items && items.length) {
+      otherDD.innerHTML = "";
+      items.forEach(v => {
+        const el = document.createElement("div");
+        el.className = "dropdown-item";
+        el.setAttribute("role", "option");
+        el.setAttribute("data-val", v);
+        el.textContent = toTitleCase(v);
+        el.addEventListener("mousedown", e => {
+          e.preventDefault();
+          otherInput.value = otherCol === "job" ? toTitleCase(v) : v;
+          if (otherCol === "employer") selEmp = v; else selJob = v;
+          updateClearBtn();
+          otherDD.className = "dropdown"; otherDD.innerHTML = "";
+          otherInput.setAttribute("aria-expanded", "false");
+        });
+        otherDD.appendChild(el);
+      });
+      otherDD.className = "dropdown open";
+      otherFieldInner.classList.add("focused");
+      otherInput.setAttribute("aria-expanded", "true");
+    } else {
+      otherDD.className = "dropdown"; otherDD.innerHTML = "";
+    }
+    return;
+  }
+
+  if (!pqReady || !pqConn) return;
   otherDD.innerHTML = '<div class="dropdown-loading">Loading…</div>';
   otherDD.className = "dropdown open";
   otherFieldInner.classList.add("focused");
@@ -824,6 +935,7 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
     items.forEach(v => {
       const el = document.createElement("div");
       el.className = "dropdown-item";
+      el.setAttribute("role", "option");
       el.setAttribute("data-val", v);
       el.textContent = toTitleCase(v);
       el.addEventListener("mousedown", e => {
@@ -832,9 +944,11 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
         if (otherCol === "employer") selEmp = v; else selJob = v;
         updateClearBtn();
         otherDD.className = "dropdown"; otherDD.innerHTML = "";
+        otherInput.setAttribute("aria-expanded", "false");
       });
       otherDD.appendChild(el);
     });
+    otherInput.setAttribute("aria-expanded", "true");
   } catch (err) {
     console.error(err);
     otherDD.className = "dropdown"; otherDD.innerHTML = "";
@@ -942,20 +1056,22 @@ function acSetup(input, dropdownId, field) {
     dd.className = "dropdown";
     dd.innerHTML = "";
     highlighted = -1;
+    input.setAttribute("aria-expanded", "false");
   }
 
   function renderItems(items) {
     if (!items || items.length === 0) { closeDD(); return; }
     dd.innerHTML = items.map(v =>
-      `<div class="dropdown-item" data-val="${v.replace(/&/g,"&amp;").replace(/"/g,"&quot;")}">${html(toTitleCase(v))}</div>`
+      `<div class="dropdown-item" role="option" data-val="${v.replace(/&/g,"&amp;").replace(/"/g,"&quot;")}">${html(toTitleCase(v))}</div>`
     ).join("");
     dd.className = "dropdown open";
+    input.setAttribute("aria-expanded", "true");
     highlighted = -1;
     dd.querySelectorAll(".dropdown-item").forEach(item => {
       item.addEventListener("mousedown", e => {
         e.preventDefault();
         const val = item.getAttribute("data-val");
-        if (field === "employer") { selEmp = val; input.value = val; }
+        if (field === "employer") { selEmp = val; input.value = toTitleCase(val); }
         else if (field === "job") { selJob = val; input.value = toTitleCase(val); }
         else { selLoc = val; input.value = toTitleCase(val); }
         updateClearBtn();
@@ -973,14 +1089,22 @@ function acSetup(input, dropdownId, field) {
   }
 
   async function fetchSuggest(q) {
-    if (usePq && pqReady) {
-      const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
-      if (!hasCtx && q.length < 2) { closeDD(); return; }
-      dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
-      dd.className = "dropdown open";
-      clearTimeout(acTimers[field]);
-      acTimers[field] = setTimeout(async () => {
-        try {
+    if (!usePq) return;
+    const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
+    if (!hasCtx && q.length < 2) { closeDD(); return; }
+    dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
+    dd.className = "dropdown open";
+    clearTimeout(acTimers[field]);
+    acTimers[field] = setTimeout(async () => {
+      try {
+        if (apiSuggestReady) {
+          const results = await fetchApiSuggest(field, q, selEmp || undefined, selJob || undefined);
+          if (results !== null) {
+            renderItems(results);
+            return;
+          }
+        }
+        if (pqReady) {
           const filterCol = field === "employer" ? (selJob ? "job" : null) : (selEmp ? "employer" : null);
           const filterVal = field === "employer" ? selJob : selEmp;
           if (hasCtx && q.length === 0) {
@@ -994,17 +1118,11 @@ function acSetup(input, dropdownId, field) {
             }
             renderItems(merged);
           }
-        } catch { closeDD(); }
-      }, 120);
-    } else if (usePq) {
-      // employer/job: parquet not ready — no API fallback, show loading or close
-      const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
-      if (!hasCtx && q.length < 2) { closeDD(); return; }
-      dd.innerHTML = '<div class="dropdown-loading">Loading suggestions…</div>';
-      dd.className = "dropdown open";
-      return;
-    }
-    // Location: no autocomplete; users type the city directly
+        } else {
+          closeDD();
+        }
+      } catch { closeDD(); }
+    }, 120);
   }
 
   input.addEventListener("input", () => {
@@ -1029,7 +1147,7 @@ function acSetup(input, dropdownId, field) {
     else if (e.key === "Enter" && highlighted >= 0 && items[highlighted]) {
       e.preventDefault();
       const val = items[highlighted].getAttribute("data-val");
-      if (field === "employer") { selEmp = val; input.value = val; }
+      if (field === "employer") { selEmp = val; input.value = toTitleCase(val); }
       else if (field === "job") { selJob = val; input.value = toTitleCase(val); }
       else { selLoc = val; input.value = toTitleCase(val); }
       updateClearBtn();
@@ -1043,7 +1161,16 @@ function acSetup(input, dropdownId, field) {
 acSetup(empInput, "empDropdown", "employer");
 acSetup(jobInput, "jobDropdown", "job");
 
-initParquetSuggestions();
+(async function initSuggestions() {
+  try {
+    const res = await fetch("/api/suggest?field=employer&q=", { headers: apiSuggestHeaders() });
+    if (res.ok) {
+      apiSuggestReady = true;
+      return;
+    }
+  } catch (_) {}
+  initParquetSuggestions();
+})();
 
 const origClearClick = $("clearBtn").onclick;
 $("clearBtn").addEventListener("click", () => {

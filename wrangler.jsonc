@@ -1,50 +1,60 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "h1b-salary-search",
-  "main": "src/index.js",
-  "compatibility_date": "2025-09-27",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "enabled": true
-  },
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "run_worker_first": true,
-    "html_handling": "none",
-    "not_found_handling": "none"
-  },
-  "kv_namespaces": [
-    {
-      "binding": "SEARCH_CACHE",
-      "id": "66dedf0a9ea940deaadacbd72039e939"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "SQL_LOGS",
-      "bucket_name": "h1b-sql-logs"
-    },
-    {
-      "binding": "SEARCH_LOGS",
-      "bucket_name": "h1b-search-logs"
-    }
-  ],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "h1b-wages",
-      "database_id": "ccf362fd-f4d0-4bb2-b17e-7ac0c9055af5"
-    }
-  ],
-  "ratelimits": [
-    {
-      "name": "API_RATE_LIMITER",
-      "namespace_id": "1001",
-      "simple": {
-        "limit": 20,
-        "period": 60
-      }
-    }
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "h1b-salary-search",
+	"main": "src/index.js",
+	"compatibility_date": "2025-09-27",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"run_worker_first": true,
+		"html_handling": "none",
+		"not_found_handling": "none"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "SEARCH_CACHE",
+			"id": "66dedf0a9ea940deaadacbd72039e939"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "SQL_LOGS",
+			"bucket_name": "h1b-sql-logs"
+		},
+		{
+			"binding": "SEARCH_LOGS",
+			"bucket_name": "h1b-search-logs"
+		},
+		{
+			"binding": "SUGGESTIONS_INDEX",
+			"bucket_name": "h1b-suggestions-index"
+		},
+		{
+			"bucket_name": "h1b-suggestions-index",
+			"binding": "Y"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "h1b-wages",
+			"database_id": "ccf362fd-f4d0-4bb2-b17e-7ac0c9055af5"
+		}
+	],
+	"ratelimits": [
+		{
+			"name": "API_RATE_LIMITER",
+			"namespace_id": "1001",
+			"simple": {
+				"limit": 20,
+				"period": 60
+			}
+		}
+	]
 }

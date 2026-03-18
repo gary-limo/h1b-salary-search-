@@ -23,6 +23,7 @@ h1b_wages_prod_replace.sql
 
 # Data parsing outputs
 job_title_changes.json
+public/suggestions_index.json
 job_title_cleanup_preview.txt
 
 # wrangler files

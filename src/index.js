@@ -15,6 +15,72 @@ const SORTABLE = new Set([
 
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 
+const SUGGESTIONS_INDEX_KEY = "suggestions_index.json";
+const MAX_SUGGEST_RESULTS = 100;
+
+let suggestionsIndexCache = null;
+
+async function getSuggestionsIndex(env, request) {
+  if (suggestionsIndexCache) return suggestionsIndexCache;
+  if (env.SUGGESTIONS_INDEX) {
+    try {
+      const obj = await env.SUGGESTIONS_INDEX.get(SUGGESTIONS_INDEX_KEY);
+      if (obj && obj.body) {
+        const body = await obj.arrayBuffer();
+        suggestionsIndexCache = JSON.parse(new TextDecoder().decode(body));
+        return suggestionsIndexCache;
+      }
+    } catch (e) {
+      console.error("R2 suggestions index:", e);
+    }
+  }
+  if (env.ASSETS) {
+    try {
+      const assetUrl = new URL("/suggestions_index.json", request.url);
+      const res = await env.ASSETS.fetch(assetUrl.toString());
+      if (res.ok) {
+        suggestionsIndexCache = await res.json();
+        return suggestionsIndexCache;
+      }
+    } catch (e) {
+      console.error("Fallback suggestions index (ASSETS):", e);
+    }
+  }
+  return null;
+}
+
+function searchFromIndex(index, field, q, contextEmployer, contextJob) {
+  const col = field === "employer" ? "employers" : "jobs";
+  const list = index[col];
+  if (!list || !Array.isArray(list)) return [];
+  const ql = q.trim().toLowerCase();
+  if (!ql) {
+    if (field === "employer" && contextJob) {
+      const arr = index.jobToEmployers[contextJob.toLowerCase()];
+      return Array.isArray(arr) ? [...new Set(arr)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })).slice(0, MAX_SUGGEST_RESULTS) : [];
+    }
+    if (field === "job" && contextEmployer) {
+      const arr = index.employerToJobs[contextEmployer.toLowerCase()];
+      return Array.isArray(arr) ? [...new Set(arr)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })).slice(0, MAX_SUGGEST_RESULTS) : [];
+    }
+    return [];
+  }
+  const prefix = list.filter((s) => s.toLowerCase().startsWith(ql));
+  const substr = list.filter((s) => {
+    const sl = s.toLowerCase();
+    return sl.includes(ql) && !sl.startsWith(ql);
+  });
+  const seen = new Set();
+  const out = [];
+  for (const s of prefix) {
+    if (!seen.has(s)) { seen.add(s); out.push(s); }
+  }
+  for (const s of substr) {
+    if (!seen.has(s)) { seen.add(s); out.push(s); }
+  }
+  return out.slice(0, MAX_SUGGEST_RESULTS);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -69,6 +135,9 @@ export default {
       }
       if (url.pathname === "/api/record") {
         return handleRecord(url.searchParams, env.DB, cors);
+      }
+      if (url.pathname === "/api/suggest") {
+        return handleSuggest(url.searchParams, env.DB, cors, env, ctx, request);
       }
 
       return jsonResponse({ error: "Not found" }, 404, cors);
@@ -240,15 +309,21 @@ function buildSuggestCacheKey(field, q, ctxEmp, ctxJob, ctxLoc) {
   return `suggest:${field}:${q}:${ctxEmp}:${ctxJob}:${ctxLoc}`;
 }
 
-async function handleSuggest(params, db, cors, env, ctx) {
+async function handleSuggest(params, db, cors, env, ctx, request) {
   const field    = params.get("field") || "";
   const q        = (params.get("q")        || "").trim().slice(0, MAX_INPUT_LENGTH);
   const ctxEmp   = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const ctxJob   = (params.get("job")      || "").trim().slice(0, MAX_INPUT_LENGTH);
   const ctxLoc   = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
 
-  // Employer/job suggestions use parquet client-side; suggest tables removed
-  if (field === "employer" || field === "job") return jsonResponse({ results: [] }, 200, cors);
+  if (field === "employer" || field === "job") {
+    const index = await getSuggestionsIndex(env, request);
+    if (index) {
+      const results = searchFromIndex(index, field, q, ctxEmp, ctxJob);
+      return jsonResponse({ results }, 200, cors);
+    }
+    return jsonResponse({ results: [] }, 200, cors);
+  }
 
   const cfg = SUGGEST_FIELDS[field];
   if (!cfg) return jsonResponse({ results: [] }, 200, cors);

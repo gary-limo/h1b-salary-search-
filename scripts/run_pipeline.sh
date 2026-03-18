@@ -153,6 +153,19 @@ info "public/pairs_v2.parquet: $PARQUET_SIZE"
 info "Step 3 completed in ${STEP3_TIME}s"
 
 # ─────────────────────────────────────────────────────────────
+# Step 3b: Build suggestions index (R2 + local fallback)
+# ─────────────────────────────────────────────────────────────
+progress "Running build_suggestions_index.py..."
+if python3 scripts/build_suggestions_index.py; then
+  if [[ -f "public/suggestions_index.json" ]]; then
+    IDX_SIZE=$(du -h public/suggestions_index.json | cut -f1 | tr -d ' ')
+    info "public/suggestions_index.json: $IDX_SIZE"
+  fi
+else
+  warn "Suggestions index not built (optional). Worker will use parquet fallback or R2 when uploaded."
+fi
+
+# ─────────────────────────────────────────────────────────────
 # Step 4: Deploy to production (optional)
 # ─────────────────────────────────────────────────────────────
 if [[ "$DEPLOY_PROD" == true ]]; then

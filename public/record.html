@@ -17,7 +17,9 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#FAFAF8;color:#1B2A4A;-webkit-font-smoothing:antialiased}
-
+.skip-link{position:absolute;top:-100%;left:16px;background:#1B2A4A;color:#fff;padding:8px 16px;border-radius:0 0 8px 8px;font-size:13px;font-weight:600;z-index:999;text-decoration:none;transition:top .15s}
+.skip-link:focus{top:0}
+:focus-visible{outline:2px solid #B8A062;outline-offset:2px}
 nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px}
 .nav-dot{width:8px;height:8px;border-radius:50%;background:#C4A35A;box-shadow:0 0 6px #C4A35A}
 .nav-title{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.3px}
@@ -77,10 +79,11 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
   <div class="nav-dot"></div>
   <span class="nav-title">H1B<span class="nav-accent">Search</span></span>
   <a href="/" class="nav-back" id="backBtn" onclick="event.preventDefault(); if (window.history.length > 1) { window.history.back(); } else { window.close(); }">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
     Back to Search
   </a>
 </nav>
+<a href="#recordContent" class="skip-link">Skip to content</a>
 
 <main>
   <div class="page-hdr">
@@ -88,8 +91,8 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
     <div class="sub" id="pageSub"></div>
   </div>
 
-  <div id="errorBox" class="error-box" style="display:none">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+  <div id="errorBox" class="error-box" style="display:none" role="alert" aria-live="assertive">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
     <span id="errorMsg"></span>
   </div>
 
