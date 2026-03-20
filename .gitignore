@@ -34,6 +34,7 @@ job_title_cleanup_preview.txt
 !.env.example
 *test*.html
 *.txt
+!public/loaderio-4c3247e60fdd6d520f36a40a6a555f42.txt
 *.xlsxß
 LCA_Disclosure_Data_*.xlsx
 pairs_kv_bulk.json

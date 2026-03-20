@@ -14,10 +14,18 @@ const SORTABLE = new Set([
 ]);
 
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
+const BLOCKED_PATHS = new Set(["/suggestions_index.json"]);
+
+const LOADER_IO_TOKEN = "loaderio-4c3247e60fdd6d520f36a40a6a555f42";
+const LOADER_IO_PATHS = new Set([
+  `/${LOADER_IO_TOKEN}.txt`,
+  `/${LOADER_IO_TOKEN}.html`,
+  `/${LOADER_IO_TOKEN}/`,
+]);
 
 const SUGGESTIONS_INDEX_KEY = "suggestions_index.json";
 const MAX_SUGGEST_RESULTS = 100;
-const SUGGESTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min: R2 updates visible without stale data
+const SUGGESTIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day: R2 updates visible within a day
 
 let suggestionsIndexCache = null;
 let suggestionsIndexFetchedAt = 0;
@@ -99,7 +107,17 @@ export default {
       "/record": "/record.html",
     };
 
-    if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p))) {
+    if (LOADER_IO_PATHS.has(url.pathname)) {
+      return new Response(`${LOADER_IO_TOKEN}\n`, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p)) || BLOCKED_PATHS.has(url.pathname)) {
       return new Response("Not Found", { status: 404 });
     }
 
@@ -315,16 +333,11 @@ async function handleRecord(params, db, cors) {
   }
 }
 
-function buildSuggestCacheKey(field, q, ctxEmp, ctxJob, ctxLoc) {
-  return `suggest:${field}:${q}:${ctxEmp}:${ctxJob}:${ctxLoc}`;
-}
-
 async function handleSuggest(params, db, cors, env, ctx, request) {
-  const field    = params.get("field") || "";
-  const q        = (params.get("q")        || "").trim().slice(0, MAX_INPUT_LENGTH);
-  const ctxEmp   = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
-  const ctxJob   = (params.get("job")      || "").trim().slice(0, MAX_INPUT_LENGTH);
-  const ctxLoc   = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const field = params.get("field") || "";
+  const q = (params.get("q") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const ctxEmp = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
+  const ctxJob = (params.get("job") || "").trim().slice(0, MAX_INPUT_LENGTH);
 
   if (field === "employer" || field === "job") {
     const index = await getSuggestionsIndex(env, request);
@@ -335,107 +348,8 @@ async function handleSuggest(params, db, cors, env, ctx, request) {
     return jsonResponse({ results: [] }, 200, cors);
   }
 
-  const cfg = SUGGEST_FIELDS[field];
-  if (!cfg) return jsonResponse({ results: [] }, 200, cors);
-
-  const { col, table } = cfg;
-  const hasContext = (field !== "employer" && ctxEmp) ||
-                     (field !== "job"      && ctxJob) ||
-                     (field !== "location" && ctxLoc);
-
-  if (!hasContext && q.length < 2) {
-    return jsonResponse({ results: [] }, 200, cors);
-  }
-
-  const kvKey = buildSuggestCacheKey(field, q, ctxEmp, ctxJob, ctxLoc);
-  const cacheUrl = new Request(`https://cache.internal/${kvKey}`);
-  const useKV = q.length <= SUGGEST_KV_MAX_Q_LEN;
-
-  const t0 = Date.now();
-  try {
-    const edgeCached = await caches.default.match(cacheUrl);
-    if (edgeCached) return edgeCached;
-  } catch {}
-
-  try {
-    if (useKV && env.SEARCH_CACHE) {
-      const kvData = await env.SEARCH_CACHE.get(kvKey, { type: "json" });
-      if (kvData) {
-        const response = jsonResponse(kvData, 200, cors);
-        if (ctx) {
-          ctx.waitUntil(caches.default.put(cacheUrl, response.clone()).catch(() => {}));
-        }
-        return response;
-      }
-    }
-  } catch {}
-
-  try {
-    let stmt;
-
-    if (hasContext) {
-      const ctxWhere    = [];
-      const ctxBindings = [];
-
-      if (field !== "employer" && ctxEmp) {
-        ctxWhere.push("employer_name = ?");
-        ctxBindings.push(ctxEmp);
-      }
-      if (field !== "job" && ctxJob) {
-        ctxWhere.push("job_title = ?");
-        ctxBindings.push(ctxJob);
-      }
-      if (field !== "location" && ctxLoc) {
-        ctxWhere.push("(worksite_city = ? OR worksite_state = ?)");
-        ctxBindings.push(ctxLoc, ctxLoc);
-      }
-
-      if (q.length >= 2) {
-        ctxWhere.push(`LOWER(${col}) = LOWER(?)`);
-        ctxBindings.push(q);
-        stmt = db.prepare(
-          `SELECT DISTINCT ${col} AS value
-           FROM h1b_wages
-           WHERE ${ctxWhere.join(" AND ")} AND ${col} != ''
-           ORDER BY ${col}
-           LIMIT 8`
-        ).bind(...ctxBindings);
-      } else {
-        stmt = db.prepare(
-          `SELECT DISTINCT ${col} AS value
-           FROM h1b_wages
-           WHERE ${ctxWhere.join(" AND ")} AND ${col} != ''
-           ORDER BY ${col}
-           LIMIT 8`
-        ).bind(...ctxBindings);
-      }
-    } else {
-      stmt = db.prepare(
-        `SELECT ${col} AS value
-         FROM ${table}
-         WHERE LOWER(${col}) = LOWER(?)
-         ORDER BY ${col}
-         LIMIT 8`
-      ).bind(q);
-    }
-
-    const { results } = await stmt.all();
-    const payload = { results: results.map((r) => r.value).filter(Boolean) };
-    const response = jsonResponse(payload, 200, cors);
-
-    if (ctx) {
-      const bgTasks = [caches.default.put(cacheUrl, response.clone()).catch(() => {})];
-      if (useKV && env.SEARCH_CACHE) {
-        bgTasks.push(env.SEARCH_CACHE.put(kvKey, JSON.stringify(payload), { expirationTtl: CACHE_TTL_KV_SUGGEST }).catch(() => {}));
-      }
-      ctx.waitUntil(Promise.all(bgTasks));
-    }
-
-    return response;
-  } catch (err) {
-    console.error("Suggest error:", err);
-    return jsonResponse({ error: "Suggestion lookup failed." }, 500, cors);
-  }
+  // Location and other fields: no server-side suggest (UI types location free-form).
+  return jsonResponse({ results: [] }, 200, cors);
 }
 
 function jsonResponse(body, status, extraHeaders) {

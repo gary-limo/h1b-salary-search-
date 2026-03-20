@@ -169,7 +169,7 @@ fi
 # Step 4: Deploy to production (optional)
 # ─────────────────────────────────────────────────────────────
 if [[ "$DEPLOY_PROD" == true ]]; then
-  step_header "Step 4/4: Deploying local D1 to production"
+  step_header "Step 4/5: Deploying local D1 to production"
   warn "This will REPLACE all production D1 tables!"
   progress "Running load_d1_replace.sh --yes..."
   STEP4_START=$SECONDS
@@ -177,11 +177,25 @@ if [[ "$DEPLOY_PROD" == true ]]; then
   STEP4_TIME=$(( SECONDS - STEP4_START ))
   info "Production D1 replaced from local D1"
   info "Step 4 completed in ${STEP4_TIME}s"
+
+  step_header "Step 5/5: Upload suggestions index to R2 (prod)"
+  if [[ -f "public/suggestions_index.json" ]]; then
+    progress "Running upload_suggestions_to_r2.sh --remote..."
+    if ./scripts/upload_suggestions_to_r2.sh; then
+      info "Suggestions index uploaded to R2"
+    else
+      warn "R2 upload failed (optional). Ensure bucket exists: npx wrangler r2 bucket create h1b-suggestions-index"
+    fi
+  else
+    warn "public/suggestions_index.json missing; skipping R2 upload"
+  fi
+  info "Step 5 completed"
 else
   echo ""
   echo -e "  ${YELLOW}Step 4 skipped${RESET} (production deploy)"
   echo -e "  To deploy to prod after testing, run:"
   echo -e "    ${BOLD}./scripts/load_d1_replace.sh${RESET}"
+  echo -e "  Then upload suggestions index: ${BOLD}./scripts/upload_suggestions_to_r2.sh${RESET}"
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -196,8 +210,10 @@ step_header "Pipeline complete"
 echo -e "  ${GREEN}Step 1${RESET}  Parse Excel → CSV                ${STEP1_TIME}s"
 echo -e "  ${GREEN}Step 2${RESET}  Build local D1 + distinct pairs   ${STEP2_TIME}s"
 echo -e "  ${GREEN}Step 3${RESET}  Create parquet                    ${STEP3_TIME}s"
+echo -e "  ${GREEN}Step 3b${RESET} Build suggestions index (JSON)    (see above)"
 if [[ "$DEPLOY_PROD" == true ]]; then
-echo -e "  ${GREEN}Step 4${RESET}  Deploy to production              ${STEP4_TIME}s"
+echo -e "  ${GREEN}Step 4${RESET}  Deploy D1 to production           ${STEP4_TIME}s"
+echo -e "  ${GREEN}Step 5${RESET}  Upload suggestions index to R2    (see above)"
 fi
 echo ""
 echo -e "  Total: ${BOLD}${MINUTES}m ${SECS}s${RESET}"
