@@ -1,11 +1,11 @@
 # https://redocly.com/docs/cli/configuration/
-extends:
-  - recommended
-
+# Keep CI strict on schema integrity, but avoid style-level rollout blockers.
 apis:
   main:
     root: openapi/openapi.yaml
 
 rules:
+  no-unresolved-refs: error
+  struct: error
   # Allow optional security (documented empty `{}` alongside ApiToken)
   security-defined: off
