@@ -110,15 +110,6 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .btn-clear:hover{background:rgba(255,255,255,.18)}
 .btn-clear.show{display:flex}
 
-.load-progress{margin-top:10px;display:none;position:relative;z-index:1}
-.load-progress.show{display:block}
-.load-bar-wrap{height:6px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden}
-.load-bar{height:100%;width:0%;background:linear-gradient(90deg,#B8A062,#D4C495);border-radius:99px;transition:width .2s ease}
-.load-status{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
-.load-text{font-size:11px;color:rgba(255,255,255,.7)}
-.load-pct{font-size:11px;color:#B8A062;font-weight:600;font-variant-numeric:tabular-nums}
-
-
 .popular{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;position:relative;z-index:1}
 .popular-label{font-size:11px;color:rgba(255,255,255,.65);align-self:center;margin-right:2px}
 .popular-btn{padding:6px 16px;border-radius:99px;border:1px solid rgba(255,255,255,.25);background:transparent;color:rgba(255,255,255,.75);font-size:13px;cursor:pointer;transition:all .15s}
@@ -302,13 +293,6 @@ th.th-filterable{position:relative}
         <button type="button" class="btn-clear" id="clearBtn" title="Clear" aria-label="Clear search fields">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
-      </div>
-      <div class="load-progress" id="loadProgress">
-        <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
-        <div class="load-status">
-          <span class="load-text" id="loadText" aria-live="polite">Initializing suggestions…</span>
-          <span class="load-pct" id="loadPct">0%</span>
-        </div>
       </div>
     </form>
 
@@ -821,9 +805,10 @@ POPULAR.forEach(item => {
 let selEmp = "", selJob = "", selLoc = "";
 const acTimers = {};
 
-let pqConn = null;
-let pqReady = false;
 let apiSuggestReady = false;
+let suggestProbeInFlight = null;
+let suggestProbeNextAllowedAt = 0;
+const SUGGEST_PROBE_COOLDOWN_MS = 10000;
 
 function apiSuggestHeaders() {
   const h = { Accept: "application/json" };
@@ -841,45 +826,27 @@ async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
   return Array.isArray(data.results) ? data.results : null;
 }
 
-function setProgress(pct, text) {
-  const bar = $("loadBar"), pctEl = $("loadPct"), txtEl = $("loadText");
-  if (bar) bar.style.width = `${pct}%`;
-  if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
-  if (text && txtEl) txtEl.textContent = text;
-}
+async function ensureApiSuggestReady(force = false) {
+  if (apiSuggestReady) return true;
+  const now = Date.now();
+  if (!force && now < suggestProbeNextAllowedAt) return false;
+  if (suggestProbeInFlight) return suggestProbeInFlight;
 
-function escSql(s) { return s.replace(/'/g, "''"); }
+  suggestProbeInFlight = (async () => {
+    try {
+      const res = await fetch("/api/suggest?field=employer&q=", { headers: apiSuggestHeaders() });
+      if (res.ok) {
+        apiSuggestReady = true;
+        return true;
+      }
+    } catch (_) {}
+    suggestProbeNextAllowedAt = Date.now() + SUGGEST_PROBE_COOLDOWN_MS;
+    return false;
+  })();
 
-async function pqSuggest(col, q, filterCol, filterVal) {
-  if (!pqReady || !pqConn) return [];
-  const p = escSql(q.trim().toLowerCase());
-  if (!p) return [];
-  let where = `lower(${col}) LIKE '${p}%'`;
-  if (filterCol && filterVal) {
-    where += ` AND lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}'`;
-  }
-  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v`);
-  return r.toArray().map(r => r.v).filter(Boolean);
-}
-
-async function pqSubstrSuggest(col, q, filterCol, filterVal) {
-  if (!pqReady || !pqConn) return [];
-  const p = escSql(q.trim().toLowerCase());
-  if (!p) return [];
-  let where = `lower(${col}) LIKE '%${p}%' AND lower(${col}) NOT LIKE '${p}%'`;
-  if (filterCol && filterVal) {
-    where += ` AND lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}'`;
-  }
-  const r = await pqConn.query(`SELECT DISTINCT ${col} AS v FROM pairs WHERE ${where} ORDER BY v`);
-  return r.toArray().map(r => r.v).filter(Boolean);
-}
-
-async function pqContextSuggest(col, filterCol, filterVal) {
-  if (!pqReady || !pqConn || !filterCol || !filterVal) return [];
-  const r = await pqConn.query(
-    `SELECT DISTINCT ${col} AS v FROM pairs WHERE lower(${filterCol}) = '${escSql(filterVal.trim().toLowerCase())}' ORDER BY v`
-  );
-  return r.toArray().map(r => r.v).filter(Boolean);
+  const ok = await suggestProbeInFlight;
+  suggestProbeInFlight = null;
+  return ok;
 }
 
 async function showRelatedSuggestions(selectedField, selectedValue) {
@@ -888,6 +855,9 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
   const otherInput = selectedField === "employer" ? jobInput : empInput;
   const otherFieldInner = $(selectedField === "employer" ? "jobFieldInner" : "empFieldInner");
 
+  if (!apiSuggestReady) {
+    await ensureApiSuggestReady();
+  }
   if (apiSuggestReady) {
     const ctxEmp = selectedField === "employer" ? selectedValue : undefined;
     const ctxJob = selectedField === "job" ? selectedValue : undefined;
@@ -919,117 +889,8 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
     return;
   }
 
-  if (!pqReady || !pqConn) return;
-  otherDD.innerHTML = '<div class="dropdown-loading">Loading…</div>';
-  otherDD.className = "dropdown open";
-  otherFieldInner.classList.add("focused");
-
-  try {
-    const r = await pqConn.query(
-      `SELECT DISTINCT ${otherCol} AS v FROM pairs WHERE lower(${selectedField}) = '${escSql(selectedValue.toLowerCase())}' ORDER BY v`
-    );
-    const items = r.toArray().map(r => r.v).filter(Boolean);
-    if (!items.length) { otherDD.className = "dropdown"; otherDD.innerHTML = ""; return; }
-
-    otherDD.innerHTML = "";
-    items.forEach(v => {
-      const el = document.createElement("div");
-      el.className = "dropdown-item";
-      el.setAttribute("role", "option");
-      el.setAttribute("data-val", v);
-      el.textContent = toTitleCase(v);
-      el.addEventListener("mousedown", e => {
-        e.preventDefault();
-        otherInput.value = otherCol === "job" ? toTitleCase(v) : v;
-        if (otherCol === "employer") selEmp = v; else selJob = v;
-        updateClearBtn();
-        otherDD.className = "dropdown"; otherDD.innerHTML = "";
-        otherInput.setAttribute("aria-expanded", "false");
-      });
-      otherDD.appendChild(el);
-    });
-    otherInput.setAttribute("aria-expanded", "true");
-  } catch (err) {
-    console.error(err);
-    otherDD.className = "dropdown"; otherDD.innerHTML = "";
-  }
-}
-
-async function initParquetSuggestions() {
-  try {
-    const DUCKDB_VERSION = "1.29.0";
-    const CDN = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/dist`;
-    const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
-
-    $("loadProgress").classList.add("show");
-    setProgress(5, "Initializing suggestions…");
-
-    const bundle = await duckdb.selectBundle({
-      mvp: { mainModule: `${CDN}/duckdb-mvp.wasm`, mainWorker: `${CDN}/duckdb-browser-mvp.worker.js` },
-      eh: { mainModule: `${CDN}/duckdb-eh.wasm`, mainWorker: `${CDN}/duckdb-browser-eh.worker.js` },
-    });
-    setProgress(15, "Loading engine…");
-    const worker = await duckdb.createWorker(bundle.mainWorker);
-    const logger = { log(){}, warn(){}, error(){}, info(){}, debug(){} };
-    const db = new duckdb.AsyncDuckDB(logger, worker);
-    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-    pqConn = await db.connect();
-    setProgress(25, "Downloading suggestion data…");
-
-    const PARQUET_URL = "pairs_v2.parquet?v=260315";
-    const PARQUET_CACHE = "h1b-parquet-260315";
-    let buf;
-    try {
-      const cache = await caches.open(PARQUET_CACHE);
-      const cached = await cache.match(PARQUET_URL);
-      if (cached) {
-        setProgress(25, "Loading cached suggestions…");
-        const ab = await cached.arrayBuffer();
-        buf = new Uint8Array(ab);
-        setProgress(85, "Loaded from cache");
-      } else {
-        const res = await fetch(PARQUET_URL);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const total = Number(res.headers.get("content-length")) || 0;
-        let loaded = 0;
-        const reader = res.body.getReader();
-        const chunks = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          loaded += value.length;
-          if (total) setProgress(25 + (loaded / total) * 60, `Downloading… ${(loaded / 1048576).toFixed(1)}MB`);
-        }
-        buf = new Uint8Array(loaded);
-        let off = 0;
-        for (const chunk of chunks) { buf.set(chunk, off); off += chunk.length; }
-        await cache.put(PARQUET_URL, new Response(buf.slice().buffer, { headers: { "Content-Type": "application/octet-stream" } }));
-      }
-    } catch (cacheErr) {
-      console.warn("Cache API unavailable, fetching directly:", cacheErr);
-      const res = await fetch(PARQUET_URL);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const ab = await res.arrayBuffer();
-      buf = new Uint8Array(ab);
-    }
-
-    setProgress(88, "Building suggestion index…");
-    await db.registerFileBuffer("pairs_v2.parquet", buf);
-    await pqConn.query("CREATE TABLE pairs AS SELECT * FROM read_parquet('pairs_v2.parquet')");
-
-    pqReady = true;
-    setProgress(100, "Ready!");
-    setTimeout(() => $("loadProgress").classList.remove("show"), 600);
-  } catch (err) {
-    console.error("Parquet suggestion init failed:", err);
-    const txtEl = $("loadText");
-    if (txtEl) txtEl.textContent = "Suggestions: using API fallback";
-    setTimeout(() => {
-      const lp = $("loadProgress");
-      if (lp) lp.classList.remove("show");
-    }, 2000);
-  }
+  otherDD.className = "dropdown";
+  otherDD.innerHTML = "";
 }
 
 function acGetContext(field) {
@@ -1050,8 +911,6 @@ function acCloseAll() {
 function acSetup(input, dropdownId, field) {
   const dd = $(dropdownId);
   let highlighted = -1;
-  const usePq = field === "employer" || field === "job";
-  const pqCol = field === "employer" ? "employer" : "job";
   function closeDD() {
     dd.className = "dropdown";
     dd.innerHTML = "";
@@ -1089,38 +948,20 @@ function acSetup(input, dropdownId, field) {
   }
 
   async function fetchSuggest(q) {
-    if (!usePq) return;
     const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
     if (!hasCtx && q.length < 2) { closeDD(); return; }
+    if (!apiSuggestReady) {
+      const ready = await ensureApiSuggestReady();
+      if (!ready) { closeDD(); return; }
+    }
     dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
     dd.className = "dropdown open";
     clearTimeout(acTimers[field]);
     acTimers[field] = setTimeout(async () => {
       try {
-        if (apiSuggestReady) {
-          const results = await fetchApiSuggest(field, q, selEmp || undefined, selJob || undefined);
-          if (results !== null) {
-            renderItems(results);
-            return;
-          }
-        }
-        if (pqReady) {
-          const filterCol = field === "employer" ? (selJob ? "job" : null) : (selEmp ? "employer" : null);
-          const filterVal = field === "employer" ? selJob : selEmp;
-          if (hasCtx && q.length === 0) {
-            renderItems(await pqContextSuggest(pqCol, filterCol, filterVal));
-          } else {
-            const prefix = await pqSuggest(pqCol, q, filterCol, filterVal);
-            const substr = q.length >= 2 ? await pqSubstrSuggest(pqCol, q, filterCol, filterVal) : [];
-            const seen = new Set(), merged = [];
-            for (const s of [...prefix, ...substr]) {
-              if (!seen.has(s)) { seen.add(s); merged.push(s); }
-            }
-            renderItems(merged);
-          }
-        } else {
-          closeDD();
-        }
+        const results = await fetchApiSuggest(field, q, selEmp || undefined, selJob || undefined);
+        if (results !== null) renderItems(results);
+        else closeDD();
       } catch { closeDD(); }
     }, 120);
   }
@@ -1162,14 +1003,7 @@ acSetup(empInput, "empDropdown", "employer");
 acSetup(jobInput, "jobDropdown", "job");
 
 (async function initSuggestions() {
-  try {
-    const res = await fetch("/api/suggest?field=employer&q=", { headers: apiSuggestHeaders() });
-    if (res.ok) {
-      apiSuggestReady = true;
-      return;
-    }
-  } catch (_) {}
-  initParquetSuggestions();
+  await ensureApiSuggestReady(true);
 })();
 
 const origClearClick = $("clearBtn").onclick;

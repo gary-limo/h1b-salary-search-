@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local `wrangler dev` (never commit .dev.vars).
+# API_TOKEN=...
+
+# Optional: if wrangler dev uses a tunnel URL (not localhost), API rate limits still apply.
+# Set this so the Worker skips rate limits (same as localhost behavior).
+# SKIP_API_RATE_LIMIT=true

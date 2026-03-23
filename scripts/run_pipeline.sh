@@ -7,14 +7,16 @@
 # to production with: ./scripts/load_d1_replace.sh
 #
 # Usage:
-#   ./scripts/run_pipeline.sh           # run full pipeline (Steps 1-3)
-#   ./scripts/run_pipeline.sh --prod    # run full pipeline + deploy to prod (Steps 1-4)
+#   ./scripts/run_pipeline.sh              # Steps 1–3 (+ optional local R2)
+#   ./scripts/run_pipeline.sh --prod       # Steps 1–5: full + prod D1 + prod R2
+#
+# Optional:
+#   UPLOAD_LOCAL_R2=1 ./scripts/run_pipeline.sh   # also seed local dev R2 after building index
 #
 # Prerequisites:
 #   - LCA Excel files in project root (LCA_Disclosure_Data_FY*.xlsx)
 #   - Python 3 with pandas, openpyxl, textblob (pip install -r requirements.txt)
 #   - Node.js with wrangler (npx wrangler)
-#   - duckdb or pyarrow for parquet generation (pip install duckdb)
 
 set -euo pipefail
 
@@ -83,16 +85,10 @@ python3 -c "import pandas, openpyxl, textblob" 2>/dev/null || {
 }
 info "Python dependencies OK (pandas, openpyxl, textblob)"
 
-progress "Checking parquet dependencies (duckdb or pyarrow)..."
-python3 -c "import duckdb" 2>/dev/null || python3 -c "import pyarrow" 2>/dev/null || {
-  fail "Missing parquet dependency. Run: pip install duckdb (or pip install pyarrow)"
-}
-info "Parquet dependencies OK (duckdb or pyarrow)"
-
 # ─────────────────────────────────────────────────────────────
 # Step 1: Parse LCA Excel files → parsed_output.csv
 # ─────────────────────────────────────────────────────────────
-step_header "Step 1/4: Parsing LCA Excel files"
+step_header "Step 1/5: Parsing LCA Excel files"
 
 progress "Running data_parsing.py (this may take several minutes)..."
 STEP1_START=$SECONDS
@@ -111,7 +107,7 @@ info "Step 1 completed in ${STEP1_TIME}s"
 # ─────────────────────────────────────────────────────────────
 # Step 2: Build local D1 from parsed_output.csv
 # ─────────────────────────────────────────────────────────────
-step_header "Step 2/4: Building local D1 database"
+step_header "Step 2/5: Building local D1 database"
 
 progress "Running create_db.py (flush → schema → data → indexes → suggest → pairs)..."
 STEP2_START=$SECONDS
@@ -133,40 +129,48 @@ info "Local D1 populated and ready"
 info "Step 2 completed in ${STEP2_TIME}s"
 
 # ─────────────────────────────────────────────────────────────
-# Step 3: Create parquet file
+# Step 3: Build suggestions index JSON (Worker + R2)
 # ─────────────────────────────────────────────────────────────
-step_header "Step 3/4: Creating parquet file"
+step_header "Step 3/5: Building suggestions index (JSON)"
 
-progress "Running to_parquet.py..."
+progress "Running build_suggestions_index.py..."
 STEP3_START=$SECONDS
-if ! python3 scripts/to_parquet.py; then
-  fail "Step 3 failed: to_parquet.py could not create parquet. Ensure distinct_employer_job_pairs.txt exists and pip install duckdb (or pyarrow)."
+if ! python3 scripts/build_suggestions_index.py; then
+  fail "Step 3 failed: build_suggestions_index.py. Ensure distinct_employer_job_pairs.txt exists."
 fi
 STEP3_TIME=$(( SECONDS - STEP3_START ))
 
-if [[ ! -f "public/pairs_v2.parquet" ]]; then
-  fail "public/pairs_v2.parquet was not created"
+if [[ ! -f "public/suggestions_index.json" ]]; then
+  warn "public/suggestions_index.json was not created (check script output)"
+else
+  IDX_SIZE=$(du -h public/suggestions_index.json | cut -f1 | tr -d ' ')
+  info "public/suggestions_index.json: $IDX_SIZE"
 fi
-
-PARQUET_SIZE=$(du -h public/pairs_v2.parquet | cut -f1 | tr -d ' ')
-info "public/pairs_v2.parquet: $PARQUET_SIZE"
 info "Step 3 completed in ${STEP3_TIME}s"
 
 # ─────────────────────────────────────────────────────────────
-# Step 3b: Build suggestions index (R2 + local fallback)
+# Step 4: Upload suggestions index to local R2 (optional)
 # ─────────────────────────────────────────────────────────────
-progress "Running build_suggestions_index.py..."
-if python3 scripts/build_suggestions_index.py; then
-  if [[ -f "public/suggestions_index.json" ]]; then
-    IDX_SIZE=$(du -h public/suggestions_index.json | cut -f1 | tr -d ' ')
-    info "public/suggestions_index.json: $IDX_SIZE"
+if [[ "$DEPLOY_PROD" != true ]]; then
+  if [[ "${UPLOAD_LOCAL_R2:-}" == "1" ]] && [[ -f "public/suggestions_index.json" ]]; then
+    step_header "Step 4/5: Upload suggestions index to local R2"
+    progress "Running upload_suggestions_to_r2.sh --local..."
+    if ! ./scripts/upload_suggestions_to_r2.sh --local; then
+      warn "Local R2 upload failed. Run manually: ./scripts/upload_suggestions_to_r2.sh --local"
+    else
+      info "Suggestions index uploaded to local R2 (wrangler dev)"
+    fi
+  else
+    echo ""
+    echo -e "  ${CYAN}Local R2:${RESET} To seed the dev bucket after building the index, run:"
+    echo -e "    ${BOLD}UPLOAD_LOCAL_R2=1 ./scripts/run_pipeline.sh${RESET}  (next run)"
+    echo -e "    or ${BOLD}./scripts/upload_suggestions_to_r2.sh --local${RESET}"
+    echo ""
   fi
-else
-  warn "Suggestions index not built (optional). Worker will use parquet fallback or R2 when uploaded."
 fi
 
 # ─────────────────────────────────────────────────────────────
-# Step 4: Deploy to production (optional)
+# Step 5: Deploy to production (optional)
 # ─────────────────────────────────────────────────────────────
 if [[ "$DEPLOY_PROD" == true ]]; then
   step_header "Step 4/5: Deploying local D1 to production"
@@ -181,10 +185,10 @@ if [[ "$DEPLOY_PROD" == true ]]; then
   step_header "Step 5/5: Upload suggestions index to R2 (prod)"
   if [[ -f "public/suggestions_index.json" ]]; then
     progress "Running upload_suggestions_to_r2.sh --remote..."
-    if ./scripts/upload_suggestions_to_r2.sh; then
-      info "Suggestions index uploaded to R2"
+    if ./scripts/upload_suggestions_to_r2.sh --remote; then
+      info "Suggestions index uploaded to production R2"
     else
-      warn "R2 upload failed (optional). Ensure bucket exists: npx wrangler r2 bucket create h1b-suggestions-index"
+      warn "R2 upload failed. Ensure bucket exists: npx wrangler r2 bucket create h1b-suggestions-index"
     fi
   else
     warn "public/suggestions_index.json missing; skipping R2 upload"
@@ -192,10 +196,10 @@ if [[ "$DEPLOY_PROD" == true ]]; then
   info "Step 5 completed"
 else
   echo ""
-  echo -e "  ${YELLOW}Step 4 skipped${RESET} (production deploy)"
-  echo -e "  To deploy to prod after testing, run:"
-  echo -e "    ${BOLD}./scripts/load_d1_replace.sh${RESET}"
-  echo -e "  Then upload suggestions index: ${BOLD}./scripts/upload_suggestions_to_r2.sh${RESET}"
+  echo -e "  ${YELLOW}Production deploy skipped${RESET}"
+  echo -e "  To deploy D1 to prod: ${BOLD}./scripts/load_d1_replace.sh${RESET}"
+  echo -e "  To upload suggestions to prod R2: ${BOLD}./scripts/upload_suggestions_to_r2.sh --remote${RESET}"
+  echo ""
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -209,17 +213,16 @@ step_header "Pipeline complete"
 
 echo -e "  ${GREEN}Step 1${RESET}  Parse Excel → CSV                ${STEP1_TIME}s"
 echo -e "  ${GREEN}Step 2${RESET}  Build local D1 + distinct pairs   ${STEP2_TIME}s"
-echo -e "  ${GREEN}Step 3${RESET}  Create parquet                    ${STEP3_TIME}s"
-echo -e "  ${GREEN}Step 3b${RESET} Build suggestions index (JSON)    (see above)"
+echo -e "  ${GREEN}Step 3${RESET}  Build suggestions index (JSON)    ${STEP3_TIME}s"
 if [[ "$DEPLOY_PROD" == true ]]; then
 echo -e "  ${GREEN}Step 4${RESET}  Deploy D1 to production           ${STEP4_TIME}s"
-echo -e "  ${GREEN}Step 5${RESET}  Upload suggestions index to R2    (see above)"
+echo -e "  ${GREEN}Step 5${RESET}  Upload suggestions index to R2      (prod)"
 fi
 echo ""
 echo -e "  Total: ${BOLD}${MINUTES}m ${SECS}s${RESET}"
 echo ""
 echo -e "  ${CYAN}Next:${RESET} Test locally with ${BOLD}npm run dev${RESET}"
 if [[ "$DEPLOY_PROD" != true ]]; then
-echo -e "        Deploy to prod with ${BOLD}./scripts/load_d1_replace.sh${RESET}"
+echo -e "        Prod: ${BOLD}./scripts/run_pipeline.sh --prod${RESET} or deploy D1 + R2 separately (see above)"
 fi
 echo ""

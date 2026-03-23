@@ -19,11 +19,16 @@ npm install
 
 # Run locally (requires Cloudflare account with D1 database)
 npm run dev
+
+# Smoke tests (same terminal or another; hits localhost only by default)
+npm run test
+# Quieter: SMOKE_QUIET=1 npm run test
+# More sample rows per case: SMOKE_SAMPLE_ROWS=5 npm run test
 ```
 
 ## Python Scripts (Data / ML)
 
-Python scripts (e.g. `scripts/create_db.py`, `scripts/to_parquet.py`, ML training) run inside a virtual environment:
+Python scripts (e.g. `scripts/create_db.py`, `scripts/build_suggestions_index.py`, ML training) run inside a virtual environment:
 
 ```bash
 # Create venv (one-time)
@@ -39,6 +44,8 @@ pip install -r requirements.txt
 # Run scripts (always with venv active)
 python scripts/create_db.py
 ```
+
+Full ETL (Excel → D1 export → suggestions JSON → optional R2) is documented in [`.github/pipeline_steps.txt`](.github/pipeline_steps.txt). Run `./scripts/run_pipeline.sh` (add `--prod` to deploy D1 + upload suggestions to production R2).
 
 ## Deploy
 

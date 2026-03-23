@@ -20,8 +20,11 @@ source_files = [
 ]
 
 target_file = os.path.join(SCRIPT_DIR, 'parsed_output.csv')
-JOB_TITLE_CHANGES_LOG = os.path.join(SCRIPT_DIR, 'job_title_changes.json')
-EMPLOYER_NAME_CHANGES_LOG = os.path.join(SCRIPT_DIR, 'employer_name_changes.json')
+# Optional audit logs (gitignored via input-docs/)
+INPUT_DOCS_DIR = os.path.join(SCRIPT_DIR, "input-docs")
+os.makedirs(INPUT_DOCS_DIR, exist_ok=True)
+JOB_TITLE_CHANGES_LOG = os.path.join(INPUT_DOCS_DIR, "job_title_changes.json")
+EMPLOYER_NAME_CHANGES_LOG = os.path.join(INPUT_DOCS_DIR, "employer_name_changes.json")
 COLUMNS_INFO_FILE = os.path.join(SCRIPT_DIR, 'columns_info.txt')
 
 # Output columns: only those listed in columns_info.txt (exact names and order).

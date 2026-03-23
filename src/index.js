@@ -16,13 +16,6 @@ const SORTABLE = new Set([
 const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 const BLOCKED_PATHS = new Set(["/suggestions_index.json"]);
 
-const LOADER_IO_TOKEN = "loaderio-4c3247e60fdd6d520f36a40a6a555f42";
-const LOADER_IO_PATHS = new Set([
-  `/${LOADER_IO_TOKEN}.txt`,
-  `/${LOADER_IO_TOKEN}.html`,
-  `/${LOADER_IO_TOKEN}/`,
-]);
-
 const SUGGESTIONS_INDEX_KEY = "suggestions_index.json";
 const MAX_SUGGEST_RESULTS = 100;
 const SUGGESTIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day: R2 updates visible within a day
@@ -83,20 +76,50 @@ function searchFromIndex(index, field, q, contextEmployer, contextJob) {
     }
     return [];
   }
-  const prefix = list.filter((s) => s.toLowerCase().startsWith(ql));
-  const substr = list.filter((s) => {
-    const sl = s.toLowerCase();
-    return sl.includes(ql) && !sl.startsWith(ql);
-  });
   const seen = new Set();
-  const out = [];
-  for (const s of prefix) {
-    if (!seen.has(s)) { seen.add(s); out.push(s); }
+  const prefix = [];
+  const substr = [];
+
+  for (const s of list) {
+    if (seen.has(s)) continue;
+    const sl = s.toLowerCase();
+    if (sl.startsWith(ql)) {
+      seen.add(s);
+      prefix.push(s);
+      // Prefix matches have highest rank; we can return immediately once full.
+      if (prefix.length >= MAX_SUGGEST_RESULTS) {
+        return prefix;
+      }
+      continue;
+    }
+    if (sl.includes(ql)) {
+      seen.add(s);
+      if (prefix.length + substr.length < MAX_SUGGEST_RESULTS) {
+        substr.push(s);
+      }
+    }
   }
-  for (const s of substr) {
-    if (!seen.has(s)) { seen.add(s); out.push(s); }
+
+  return prefix.concat(substr).slice(0, MAX_SUGGEST_RESULTS);
+}
+
+/** wrangler dev uses localhost — skip API rate limits so local smoke tests can burst. Production still limited. */
+function isLocalDevHostname(hostname) {
+  const h = (hostname || "").toLowerCase();
+  return h === "localhost" || h === "127.0.0.1" || h === "::1" || h.endsWith(".localhost");
+}
+
+/** Apply ratelimit only in production-like traffic. Optional: SKIP_API_RATE_LIMIT=true in .dev.vars (tunnels). */
+function shouldApplyApiRateLimit(request, env) {
+  if (!env.API_RATE_LIMITER) return false;
+  if (env.SKIP_API_RATE_LIMIT === "true") return false;
+  try {
+    const { hostname } = new URL(request.url);
+    if (isLocalDevHostname(hostname)) return false;
+  } catch {
+    /* fall through */
   }
-  return out.slice(0, MAX_SUGGEST_RESULTS);
+  return true;
 }
 
 export default {
@@ -106,16 +129,6 @@ export default {
       "/": "/index.html",
       "/record": "/record.html",
     };
-
-    if (LOADER_IO_PATHS.has(url.pathname)) {
-      return new Response(`${LOADER_IO_TOKEN}\n`, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-store",
-        },
-      });
-    }
 
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p)) || BLOCKED_PATHS.has(url.pathname)) {
       return new Response("Not Found", { status: 404 });
@@ -147,7 +160,7 @@ export default {
       }
 
       const ip = request.headers.get("cf-connecting-ip") || "unknown";
-      if (env.API_RATE_LIMITER) {
+      if (shouldApplyApiRateLimit(request, env)) {
         const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
         if (!success) {
           return jsonResponse(
@@ -253,17 +266,21 @@ async function handleSearch(params, db, cors, env, ctx) {
   const where = [];
   const bindings = [];
 
-  if (employer) {
-    where.push("LOWER(employer_name) = LOWER(?)");
-    bindings.push(employer);
+  const employerNorm = employer.toLowerCase();
+  const jobNorm = job.toLowerCase();
+  const locationNorm = location.toLowerCase();
+
+  if (employerNorm) {
+    where.push("employer_name = ?");
+    bindings.push(employerNorm);
   }
-  if (job) {
-    where.push("LOWER(job_title) = LOWER(?)");
-    bindings.push(job);
+  if (jobNorm) {
+    where.push("job_title = ?");
+    bindings.push(jobNorm);
   }
-  if (location) {
-    where.push("(LOWER(worksite_city) = LOWER(?) OR LOWER(worksite_state) = LOWER(?))");
-    bindings.push(location, location);
+  if (locationNorm) {
+    where.push("(worksite_city = ? OR worksite_state = ?)");
+    bindings.push(locationNorm, locationNorm);
   }
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";

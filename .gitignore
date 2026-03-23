@@ -1,4 +1,4 @@
-# Source data (large CSVs - parquet is built from these)
+# Source data (large CSVs)
 output_filtered*.csv
 *.csv
 
@@ -16,14 +16,20 @@ __pycache__/
 # OS
 .DS_Store
 
+# Local throwaway assets (e.g. LinkedIn article screenshots)
+temp/
+
 # SQLite DB (regenerate with scripts/create_db.py)
 h1b_wages.db
 h1b_wages_export.sql
 h1b_wages_prod_replace.sql
 
+# Local data / archives (CSV/JSON not tracked; keep for your own runs)
+input-docs/
+
 # Data parsing outputs
-job_title_changes.json
 public/suggestions_index.json
+public/*.parquet
 job_title_cleanup_preview.txt
 
 # wrangler files
@@ -34,9 +40,7 @@ job_title_cleanup_preview.txt
 !.env.example
 *test*.html
 *.txt
-!public/loaderio-4c3247e60fdd6d520f36a40a6a555f42.txt
+!.github/pipeline_steps.txt
 *.xlsxß
 LCA_Disclosure_Data_*.xlsx
-pairs_kv_bulk.json
-employer_name_changes.json
 distinct_employer_job_pairs.txt

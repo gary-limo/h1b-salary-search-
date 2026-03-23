@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Pre-build a JSON suggestion index from distinct_employer_job_pairs.txt.
-Output: public/suggestions_index.json for Worker R2 + local fallback.
-Run after distinct_employer_job_pairs.txt exists (same pipeline as to_parquet.py).
+Output: public/suggestions_index.json for Worker R2 + local static fallback.
+Run after distinct_employer_job_pairs.txt exists (see scripts/run_pipeline.sh).
 """
 
 import json

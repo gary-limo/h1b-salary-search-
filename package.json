@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:remote": "wrangler dev --remote",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "node tests/run-smoke.mjs",
+    "test:smoke": "node tests/run-smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
