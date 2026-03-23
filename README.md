@@ -4,6 +4,12 @@ Free, open-source search engine for H-1B visa salary data from the U.S. Departme
 
 **Live:** [h1b-salaries.com](https://h1b-salaries.com)
 
+## API contract
+
+The public JSON API (`/api/search`, `/api/record`, `/api/suggest`) is documented in **[`openapi/openapi.yaml`](openapi/openapi.yaml)** (OpenAPI 3). Lint locally with `npm run lint:openapi` (same check runs in GitHub Actions).
+
+Behavior is implemented in [`src/index.js`](src/index.js). Smoke tests in [`tests/run-smoke.mjs`](tests/run-smoke.mjs) exercise `/api/search` and `/api/suggest` against a running dev server.
+
 ## Stack
 
 - **Frontend:** Plain HTML/CSS/JS (no framework, no build step)

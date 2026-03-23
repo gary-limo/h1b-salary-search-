@@ -1,0 +1,455 @@
+openapi: 3.0.3
+info:
+  title: H1B Salary Search API
+  description: |
+    JSON API served by the Cloudflare Worker (`src/index.js`). Same-origin browser requests
+    require a matching `Origin` or `Referer` host, or no `Origin`/`Referer` (same-host fetch).
+    Cross-origin API calls without a valid same-host `Origin`/`Referer` receive **403**.
+
+    When `API_TOKEN` is configured in the Worker environment, include header **X-API-Token**
+    with that value; otherwise the API returns **403** with `{ "error": "Forbidden" }`.
+
+    Rate limiting may return **429** with `Retry-After: 60` in production (not applied on
+    localhost / `127.0.0.1` / `::1` / `*.localhost`, or when `SKIP_API_RATE_LIMIT=true`).
+  version: "1.0.0"
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://h1b-salaries.com
+    description: Production
+  - url: http://127.0.0.1:8787
+    description: Local `wrangler dev` (default port)
+
+tags:
+  - name: Search
+  - name: Record
+  - name: Suggest
+
+paths:
+  /api/search:
+    get:
+      tags: [Search]
+      operationId: searchH1bWages
+      summary: Search H-1B wage rows
+      description: |
+        At least one of `employer`, `job`, or `location` must be non-empty after trim.
+        Strings are truncated server-side to **200** characters. Employer/job/location
+        matching uses normalized lowercase equality (location matches `worksite_city` or
+        `worksite_state`). Pagination: `page` 1–10000, `pageSize` 1–100 (default 100).
+        Unknown `sort` falls back to `wage_rate_of_pay_from`; `dir` is **ASC** or **DESC**
+        (default **DESC**).
+      parameters:
+        - $ref: "#/components/parameters/EmployerQuery"
+        - $ref: "#/components/parameters/JobQuery"
+        - $ref: "#/components/parameters/LocationQuery"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
+        - $ref: "#/components/parameters/SortQuery"
+        - $ref: "#/components/parameters/DirQuery"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          description: Missing search terms
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              examples:
+                noTerms:
+                  value:
+                    error: Please provide at least one search term.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/SearchFailed"
+      security:
+        - ApiToken: []
+        - {}
+
+  /api/record:
+    get:
+      tags: [Record]
+      operationId: getH1bRecord
+      summary: Get a single record by id
+      parameters:
+        - name: id
+          in: query
+          required: true
+          description: |
+            UUID v1–v5 string (RFC 4122 pattern). Max **50** characters after trim.
+          schema:
+            type: string
+            maxLength: 50
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Record found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordResponse"
+        "400":
+          description: Invalid id format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              examples:
+                invalidId:
+                  value:
+                    error: Invalid record ID.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No row for this id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              examples:
+                notFound:
+                  value:
+                    error: Record not found.
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          description: Database or internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              examples:
+                loadFailed:
+                  value:
+                    error: Failed to load record.
+      security:
+        - ApiToken: []
+        - {}
+
+  /api/suggest:
+    get:
+      tags: [Suggest]
+      operationId: suggestEmployerOrJob
+      summary: Autocomplete suggestions for employer or job
+      description: |
+        For `field` **employer** or **job**, suggestions come from a prebuilt index (R2 or
+        static asset). Other `field` values return an empty `results` array with **200**.
+        Optional `employer` / `job` provide context when `q` is empty (related employers/jobs).
+        Up to **100** string results.
+      parameters:
+        - name: field
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [employer, job]
+          description: When omitted or not `employer`/`job`, response is `{ "results": [] }`.
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+          description: Prefix/substring query (trimmed, max 200 chars).
+        - $ref: "#/components/parameters/SuggestContextEmployer"
+        - $ref: "#/components/parameters/SuggestContextJob"
+      responses:
+        "200":
+          description: Suggestion strings (may be empty)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+      security:
+        - ApiToken: []
+        - {}
+
+components:
+  securitySchemes:
+    ApiToken:
+      type: apiKey
+      in: header
+      name: X-API-Token
+      description: Required only when the Worker has `API_TOKEN` set.
+
+  parameters:
+    EmployerQuery:
+      name: employer
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+    JobQuery:
+      name: job
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+    LocationQuery:
+      name: location
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+    PageQuery:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 10000
+        default: 1
+    PageSizeQuery:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+    SortQuery:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum:
+          - employer_name
+          - job_title
+          - wage_rate_of_pay_from
+          - worksite_state
+          - worksite_city
+          - begin_date
+          - end_date
+        default: wage_rate_of_pay_from
+      description: Unknown values are treated as `wage_rate_of_pay_from`.
+    DirQuery:
+      name: dir
+      in: query
+      schema:
+        type: string
+        enum: [ASC, DESC]
+        default: DESC
+    SuggestContextEmployer:
+      name: employer
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+      description: Context when `field=job` and `q` is empty.
+    SuggestContextJob:
+      name: job
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+      description: Context when `field=employer` and `q` is empty.
+
+  responses:
+    Forbidden:
+      description: Wrong or missing API token, or cross-origin request without same-host Origin/Referer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          examples:
+            forbidden:
+              value:
+                error: Forbidden
+    MethodNotAllowed:
+      description: Only GET is allowed (except OPTIONS for CORS)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          examples:
+            method:
+              value:
+                error: Method not allowed
+    TooManyRequests:
+      description: Rate limit exceeded (production-like traffic)
+      headers:
+        Retry-After:
+          schema:
+            type: string
+            example: "60"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          examples:
+            ratelimit:
+              value:
+                error: Too many requests. Please try again later.
+    SearchFailed:
+      description: Database or internal error during search
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          examples:
+            searchFailed:
+              value:
+                error: Search failed. Please try again.
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SearchRow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employer_name:
+          type: string
+        job_title:
+          type: string
+        wage_rate_of_pay_from:
+          type: number
+          nullable: true
+        worksite_city:
+          type: string
+          nullable: true
+        worksite_state:
+          type: string
+          nullable: true
+        begin_date:
+          type: string
+          nullable: true
+        end_date:
+          type: string
+          nullable: true
+
+    SearchResponse:
+      type: object
+      required: [total, page, pageSize, results]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchRow"
+
+    RecordRow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        case_number:
+          type: string
+          nullable: true
+        job_title:
+          type: string
+          nullable: true
+        soc_code:
+          type: string
+          nullable: true
+        soc_title:
+          type: string
+          nullable: true
+        begin_date:
+          type: string
+          nullable: true
+        end_date:
+          type: string
+          nullable: true
+        employer_name:
+          type: string
+          nullable: true
+        employer_address1:
+          type: string
+          nullable: true
+        employer_address2:
+          type: string
+          nullable: true
+        employer_city:
+          type: string
+          nullable: true
+        employer_state:
+          type: string
+          nullable: true
+        employer_postal_code:
+          type: string
+          nullable: true
+        employer_country:
+          type: string
+          nullable: true
+        worksite_address1:
+          type: string
+          nullable: true
+        worksite_address2:
+          type: string
+          nullable: true
+        worksite_city:
+          type: string
+          nullable: true
+        worksite_county:
+          type: string
+          nullable: true
+        worksite_state:
+          type: string
+          nullable: true
+        worksite_postal_code:
+          type: string
+          nullable: true
+        wage_rate_of_pay_from:
+          type: number
+          nullable: true
+        wage_rate_of_pay_to:
+          type: number
+          nullable: true
+        prevailing_wage:
+          type: number
+          nullable: true
+        pw_wage_level:
+          type: string
+          nullable: true
+
+    RecordResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          $ref: "#/components/schemas/RecordRow"
+
+    SuggestResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            type: string

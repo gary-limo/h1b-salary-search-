@@ -1,0 +1,11 @@
+# https://redocly.com/docs/cli/configuration/
+extends:
+  - recommended
+
+apis:
+  main:
+    root: openapi/openapi.yaml
+
+rules:
+  # Allow optional security (documented empty `{}` alongside ApiToken)
+  security-defined: off
