@@ -7,11 +7,8 @@
 # to production with: ./scripts/load_d1_replace.sh
 #
 # Usage:
-#   ./scripts/run_pipeline.sh              # Steps 1–3 (+ optional local R2)
-#   ./scripts/run_pipeline.sh --prod       # Steps 1–5: full + prod D1 + prod R2
-#
-# Optional:
-#   UPLOAD_LOCAL_R2=1 ./scripts/run_pipeline.sh   # also seed local dev R2 after building index
+#   ./scripts/run_pipeline.sh              # Steps 1–4: parse → local D1 → index → local R2
+#   ./scripts/run_pipeline.sh --prod       # Same + prod D1 replace + production R2 upload
 #
 # Prerequisites:
 #   - LCA Excel files in project root (LCA_Disclosure_Data_FY*.xlsx)
@@ -88,11 +85,11 @@ info "Python dependencies OK (pandas, openpyxl, textblob)"
 # ─────────────────────────────────────────────────────────────
 # Step 1: Parse LCA Excel files → parsed_output.csv
 # ─────────────────────────────────────────────────────────────
-step_header "Step 1/5: Parsing LCA Excel files"
+step_header "Step 1: Parsing LCA Excel files"
 
-progress "Running data_parsing.py (this may take several minutes)..."
+progress "Running scripts/data_parsing.py (this may take several minutes)..."
 STEP1_START=$SECONDS
-python3 data_parsing.py
+python3 scripts/data_parsing.py
 STEP1_TIME=$(( SECONDS - STEP1_START ))
 
 if [[ ! -f "parsed_output.csv" ]]; then
@@ -107,7 +104,7 @@ info "Step 1 completed in ${STEP1_TIME}s"
 # ─────────────────────────────────────────────────────────────
 # Step 2: Build local D1 from parsed_output.csv
 # ─────────────────────────────────────────────────────────────
-step_header "Step 2/5: Building local D1 database"
+step_header "Step 2: Building local D1 database"
 
 progress "Running create_db.py (flush → schema → data → indexes → suggest → pairs)..."
 STEP2_START=$SECONDS
@@ -131,7 +128,7 @@ info "Step 2 completed in ${STEP2_TIME}s"
 # ─────────────────────────────────────────────────────────────
 # Step 3: Build suggestions index JSON (Worker + R2)
 # ─────────────────────────────────────────────────────────────
-step_header "Step 3/5: Building suggestions index (JSON)"
+step_header "Step 3: Building suggestions index (JSON)"
 
 progress "Running build_suggestions_index.py..."
 STEP3_START=$SECONDS
@@ -149,56 +146,50 @@ fi
 info "Step 3 completed in ${STEP3_TIME}s"
 
 # ─────────────────────────────────────────────────────────────
-# Step 4: Upload suggestions index to local R2 (optional)
+# Step 4: Upload suggestions index to local R2 (always when index exists)
 # ─────────────────────────────────────────────────────────────
-if [[ "$DEPLOY_PROD" != true ]]; then
-  if [[ "${UPLOAD_LOCAL_R2:-}" == "1" ]] && [[ -f "public/suggestions_index.json" ]]; then
-    step_header "Step 4/5: Upload suggestions index to local R2"
-    progress "Running upload_suggestions_to_r2.sh --local..."
-    if ! ./scripts/upload_suggestions_to_r2.sh --local; then
-      warn "Local R2 upload failed. Run manually: ./scripts/upload_suggestions_to_r2.sh --local"
-    else
-      info "Suggestions index uploaded to local R2 (wrangler dev)"
-    fi
+if [[ -f "public/suggestions_index.json" ]]; then
+  step_header "Step 4: Upload suggestions index to local R2"
+  progress "Running upload_suggestions_to_r2.sh --local..."
+  if ! ./scripts/upload_suggestions_to_r2.sh --local; then
+    warn "Local R2 upload failed. Run manually: ./scripts/upload_suggestions_to_r2.sh --local"
   else
-    echo ""
-    echo -e "  ${CYAN}Local R2:${RESET} To seed the dev bucket after building the index, run:"
-    echo -e "    ${BOLD}UPLOAD_LOCAL_R2=1 ./scripts/run_pipeline.sh${RESET}  (next run)"
-    echo -e "    or ${BOLD}./scripts/upload_suggestions_to_r2.sh --local${RESET}"
-    echo ""
+    info "Suggestions index uploaded to local R2 (wrangler dev / Miniflare)"
   fi
+else
+  warn "public/suggestions_index.json missing; skipping local R2 upload"
 fi
 
 # ─────────────────────────────────────────────────────────────
-# Step 5: Deploy to production (optional)
+# Step 5–6: Deploy to production (optional)
 # ─────────────────────────────────────────────────────────────
 if [[ "$DEPLOY_PROD" == true ]]; then
-  step_header "Step 4/5: Deploying local D1 to production"
+  step_header "Step 5: Deploying local D1 to production"
   warn "This will REPLACE all production D1 tables!"
   progress "Running load_d1_replace.sh --yes..."
-  STEP4_START=$SECONDS
+  STEP5_START=$SECONDS
   ./scripts/load_d1_replace.sh --yes
-  STEP4_TIME=$(( SECONDS - STEP4_START ))
+  STEP5_TIME=$(( SECONDS - STEP5_START ))
   info "Production D1 replaced from local D1"
-  info "Step 4 completed in ${STEP4_TIME}s"
+  info "Step 5 completed in ${STEP5_TIME}s"
 
-  step_header "Step 5/5: Upload suggestions index to R2 (prod)"
+  step_header "Step 6: Upload suggestions index to production R2"
   if [[ -f "public/suggestions_index.json" ]]; then
     progress "Running upload_suggestions_to_r2.sh --remote..."
     if ./scripts/upload_suggestions_to_r2.sh --remote; then
       info "Suggestions index uploaded to production R2"
     else
-      warn "R2 upload failed. Ensure bucket exists: npx wrangler r2 bucket create h1b-suggestions-index"
+      warn "Production R2 upload failed. Ensure bucket exists: npx wrangler r2 bucket create h1b-suggestions-index"
     fi
   else
-    warn "public/suggestions_index.json missing; skipping R2 upload"
+    warn "public/suggestions_index.json missing; skipping production R2 upload"
   fi
-  info "Step 5 completed"
+  info "Production deploy steps completed"
 else
   echo ""
   echo -e "  ${YELLOW}Production deploy skipped${RESET}"
-  echo -e "  To deploy D1 to prod: ${BOLD}./scripts/load_d1_replace.sh${RESET}"
-  echo -e "  To upload suggestions to prod R2: ${BOLD}./scripts/upload_suggestions_to_r2.sh --remote${RESET}"
+  echo -e "  To deploy D1 + prod R2: ${BOLD}./scripts/run_pipeline.sh --prod${RESET}"
+  echo -e "  Or separately: ${BOLD}./scripts/load_d1_replace.sh${RESET} and ${BOLD}./scripts/upload_suggestions_to_r2.sh --remote${RESET}"
   echo ""
 fi
 
@@ -211,12 +202,13 @@ SECS=$(( TOTAL_TIME % 60 ))
 
 step_header "Pipeline complete"
 
-echo -e "  ${GREEN}Step 1${RESET}  Parse Excel → CSV                ${STEP1_TIME}s"
-echo -e "  ${GREEN}Step 2${RESET}  Build local D1 + distinct pairs   ${STEP2_TIME}s"
-echo -e "  ${GREEN}Step 3${RESET}  Build suggestions index (JSON)    ${STEP3_TIME}s"
+echo -e "  ${GREEN}Step 1${RESET}  Parse Excel → CSV                 ${STEP1_TIME}s"
+echo -e "  ${GREEN}Step 2${RESET}  Build local D1 + distinct pairs    ${STEP2_TIME}s"
+echo -e "  ${GREEN}Step 3${RESET}  Build suggestions index (JSON)     ${STEP3_TIME}s"
+echo -e "  ${GREEN}Step 4${RESET}  Upload suggestions index → local R2"
 if [[ "$DEPLOY_PROD" == true ]]; then
-echo -e "  ${GREEN}Step 4${RESET}  Deploy D1 to production           ${STEP4_TIME}s"
-echo -e "  ${GREEN}Step 5${RESET}  Upload suggestions index to R2      (prod)"
+echo -e "  ${GREEN}Step 5${RESET}  Deploy D1 to production            ${STEP5_TIME}s"
+echo -e "  ${GREEN}Step 6${RESET}  Upload suggestions index → prod R2"
 fi
 echo ""
 echo -e "  Total: ${BOLD}${MINUTES}m ${SECS}s${RESET}"

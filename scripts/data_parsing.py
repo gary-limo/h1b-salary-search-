@@ -7,25 +7,26 @@ from difflib import SequenceMatcher
 import pandas as pd
 from textblob import TextBlob
 
-# Use the folder containing this script as the base directory
+# This file lives in scripts/; repo root (Excel, CSV, columns_info) is one level up.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
-# Define source and target file paths (relative to script folder)
+# LCA Excel sources and outputs are in the project root
 source_files = [
-    os.path.join(SCRIPT_DIR, 'LCA_Disclosure_Data_FY2025_Q1.xlsx'),
-    os.path.join(SCRIPT_DIR, 'LCA_Disclosure_Data_FY2025_Q2.xlsx'),
-    os.path.join(SCRIPT_DIR, 'LCA_Disclosure_Data_FY2025_Q3.xlsx'),
-    os.path.join(SCRIPT_DIR, 'LCA_Disclosure_Data_FY2025_Q4.xlsx'),
-    os.path.join(SCRIPT_DIR, 'LCA_Disclosure_Data_FY2026_Q1.xlsx'),
+    os.path.join(PROJECT_DIR, 'LCA_Disclosure_Data_FY2025_Q1.xlsx'),
+    os.path.join(PROJECT_DIR, 'LCA_Disclosure_Data_FY2025_Q2.xlsx'),
+    os.path.join(PROJECT_DIR, 'LCA_Disclosure_Data_FY2025_Q3.xlsx'),
+    os.path.join(PROJECT_DIR, 'LCA_Disclosure_Data_FY2025_Q4.xlsx'),
+    os.path.join(PROJECT_DIR, 'LCA_Disclosure_Data_FY2026_Q1.xlsx'),
 ]
 
-target_file = os.path.join(SCRIPT_DIR, 'parsed_output.csv')
+target_file = os.path.join(PROJECT_DIR, 'parsed_output.csv')
 # Optional audit logs (gitignored via input-docs/)
-INPUT_DOCS_DIR = os.path.join(SCRIPT_DIR, "input-docs")
+INPUT_DOCS_DIR = os.path.join(PROJECT_DIR, "input-docs")
 os.makedirs(INPUT_DOCS_DIR, exist_ok=True)
 JOB_TITLE_CHANGES_LOG = os.path.join(INPUT_DOCS_DIR, "job_title_changes.json")
 EMPLOYER_NAME_CHANGES_LOG = os.path.join(INPUT_DOCS_DIR, "employer_name_changes.json")
-COLUMNS_INFO_FILE = os.path.join(SCRIPT_DIR, 'columns_info.txt')
+COLUMNS_INFO_FILE = os.path.join(PROJECT_DIR, 'columns_info.txt')
 
 # Output columns: only those listed in columns_info.txt (exact names and order).
 # Regardless of future Excel schema changes, parse and output only these columns.
@@ -53,11 +54,29 @@ def format_date_only(series):
     return pd.to_datetime(series, errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
 
 
+# Preserve Microsoft .NET skill token through punctuation stripping (must be letters-only for clean_field).
+_DOTNET_PLACEHOLDER = "z9xdnetmkz9x"
+
+
+def _mask_dotnet(text: str) -> str:
+    """Replace .net (case-insensitive) so the dot is not stripped as punctuation."""
+    return re.sub(r"(?i)\.net", _DOTNET_PLACEHOLDER, text)
+
+
+def _unmask_dotnet(text: str) -> str:
+    return text.replace(_DOTNET_PLACEHOLDER, ".net")
+
+
 def normalize_title_text(title):
-    """Normalize title text for similarity and spell-correction comparisons."""
+    """Normalize title text for similarity and spell-correction comparisons.
+
+    Keeps & and .net consistent with clean_field / clean_job_title_field.
+    """
     text = str(title).lower().strip()
-    text = re.sub(r'[^a-z0-9\s]', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = _mask_dotnet(text)
+    text = re.sub(r"[^a-z0-9\s&]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = _unmask_dotnet(text)
     return text
 
 
@@ -310,7 +329,7 @@ start_time = time.perf_counter()
 print("Phase 1: Analyzing Excel file headers...")
 existing_files = [f for f in source_files if os.path.exists(f)]
 if not existing_files:
-    raise FileNotFoundError(f"No Excel files found. Expected in: {SCRIPT_DIR}")
+    raise FileNotFoundError(f"No Excel files found. Expected in: {PROJECT_DIR}")
 
 file_headers = {}
 for source_file in existing_files:
@@ -497,15 +516,29 @@ if 'WAGE_RATE_OF_PAY_FROM' in output_data.columns:
         print(f"  Wage correction: skipped {skipped_count} record(s) due to data quality issues.")
 
 
-def clean_field(value):
-    """Lowercase, trim, replace special chars with space, collapse multiple spaces."""
+def clean_field(value, keep_ampersand=False):
+    """Lowercase, trim, replace special chars with space, collapse multiple spaces.
+
+    If keep_ampersand is True, & is preserved (for EMPLOYER_NAME / JOB_TITLE).
+    """
     if pd.isna(value):
-        return ''
+        return ""
     text = str(value).lower().strip()
-    # Replace all non-alphanumeric characters with a space (keeps word boundaries, e.g. pmo/opd -> pmo opd)
-    text = re.sub(r'[^a-z0-9\s]', ' ', text)
-    # Enforce strictly single spaces between words
-    text = re.sub(r'\s+', ' ', text).strip()
+    pattern = r"[^a-z0-9\s&]" if keep_ampersand else r"[^a-z0-9\s]"
+    text = re.sub(pattern, " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def clean_job_title_field(value):
+    """Like clean_field for JOB_TITLE: keep &, preserve .net (e.g. asp.net, .net developer)."""
+    if pd.isna(value):
+        return ""
+    text = str(value).lower().strip()
+    text = _mask_dotnet(text)
+    text = re.sub(r"[^a-z0-9\s&]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = _unmask_dotnet(text)
     return text
 
 
@@ -514,7 +547,12 @@ COLUMNS_NO_CLEAN = frozenset(['CASE_NUMBER', 'SOC_CODE', 'BEGIN_DATE', 'END_DATE
 for col in output_data.columns:
     if col in COLUMNS_NO_CLEAN:
         continue
-    output_data[col] = output_data[col].apply(clean_field)
+    if col == "JOB_TITLE":
+        output_data[col] = output_data[col].apply(clean_job_title_field)
+    elif col == "EMPLOYER_NAME":
+        output_data[col] = output_data[col].apply(lambda v: clean_field(v, keep_ampersand=True))
+    else:
+        output_data[col] = output_data[col].apply(clean_field)
 
 # Capture job titles before SOC removal + noise cleanup (for change logging)
 if 'JOB_TITLE' in output_data.columns and 'CASE_NUMBER' in output_data.columns:

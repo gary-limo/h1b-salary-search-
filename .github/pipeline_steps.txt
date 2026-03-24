@@ -1,28 +1,34 @@
 H1B Salary Search — data pipeline steps
 =======================================
 
+High-level ETL diagram (Excalidraw): docs/diagrams/etl-pipeline.excalidraw
+  Open in https://excalidraw.com → Load, or open from VS Code / desktop app.
+
 Run from repo root: ./scripts/run_pipeline.sh
 
 Step 1 — Parse LCA Excel → parsed_output.csv
-  python3 data_parsing.py
+  python3 scripts/data_parsing.py
 
 Step 2 — Build local D1 export + distinct employer/job pairs
   python3 scripts/create_db.py
+  After data load + indexes, applies (if present):
+    scripts/openrefine_employer_name_updates.sql
+    scripts/openrefine_job_title_updates.sql
   Outputs: h1b_wages_export.sql, distinct_employer_job_pairs.txt
 
 Step 3 — Build suggestions index for /api/suggest (Worker + R2)
   python3 scripts/build_suggestions_index.py
   Output: public/suggestions_index.json
 
-Step 4 — (Optional, local dev) Upload suggestions JSON to local R2
-  ./scripts/upload_suggestions_to_r2.sh --local
-  Or set UPLOAD_LOCAL_R2=1 when running the pipeline (non-prod).
+Step 4 — Upload suggestions JSON to local R2 (automatic after step 3)
+  ./scripts/run_pipeline.sh runs: ./scripts/upload_suggestions_to_r2.sh --local
+  Re-run manually if upload failed: ./scripts/upload_suggestions_to_r2.sh --local
 
-Step 5 — Production deploy (when ready)
+Step 5–6 — Production deploy (when ready)
   ./scripts/run_pipeline.sh --prod
-  Includes: load_d1_replace.sh (D1) + upload_suggestions_to_r2.sh --remote (R2)
+  Runs: Step 4 (local R2) + load_d1_replace.sh (D1) + upload_suggestions_to_r2.sh --remote (prod R2)
 
-Manual prod R2 upload only:
+Manual prod R2 upload only (index already built):
   ./scripts/upload_suggestions_to_r2.sh --remote
 
 Notes

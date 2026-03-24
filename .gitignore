@@ -19,6 +19,9 @@ __pycache__/
 # Local throwaway assets (e.g. LinkedIn article screenshots)
 temp/
 
+# Ad-hoc exports (distinct lists, etc.)
+exports/
+
 # SQLite DB (regenerate with scripts/create_db.py)
 h1b_wages.db
 h1b_wages_export.sql

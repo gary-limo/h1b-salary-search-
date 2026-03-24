@@ -100,6 +100,10 @@ const LOCATIONS = [
   "Chicago",
 ];
 
+/** Exact strings that must return ≥1 row — exercises & and similar in query encoding. */
+const SPECIAL_CASE_EMPLOYER = "E&K Sunrise Inc";
+const SPECIAL_CASE_JOB = "R&D Analyst";
+
 function rowMatchesLocation(row, loc) {
   const l = loc.toLowerCase();
   const city = (row.worksite_city || "").toLowerCase();
@@ -276,6 +280,43 @@ async function main() {
     if (body.total > 0) locNonZero++;
   }
   log(`\n  ✓ /api/search location — ${LOCATIONS.length} queries passed (${locNonZero} with total > 0)`);
+
+  log(`\n  === /api/search special cases (& in employer / job title) ===`);
+  log(`    (require total > 0 — URLSearchParams encodes & in query values)`);
+
+  const specialEmployerBody = await assertSearch(
+    `Special employer: ${SPECIAL_CASE_EMPLOYER}`,
+    { employer: SPECIAL_CASE_EMPLOYER, pageSize: 5 },
+    "employer",
+    (row, p) => {
+      if (row.employer_name.toLowerCase() !== p.employer.toLowerCase()) {
+        throw new Error(`employer mismatch: got ${JSON.stringify(row.employer_name)}`);
+      }
+    },
+  );
+  if (specialEmployerBody.total === 0) {
+    throw new Error(
+      `Special employer ${JSON.stringify(SPECIAL_CASE_EMPLOYER)} returned no rows — expected ≥1 (check DB spelling / data load).`,
+    );
+  }
+
+  const specialJobBody = await assertSearch(
+    `Special job: ${SPECIAL_CASE_JOB}`,
+    { job: SPECIAL_CASE_JOB, pageSize: 5 },
+    "job",
+    (row, p) => {
+      if (row.job_title.toLowerCase() !== p.job.toLowerCase()) {
+        throw new Error(`job_title mismatch: got ${JSON.stringify(row.job_title)}`);
+      }
+    },
+  );
+  if (specialJobBody.total === 0) {
+    throw new Error(
+      `Special job ${JSON.stringify(SPECIAL_CASE_JOB)} returned no rows — expected ≥1 (check DB spelling / data load).`,
+    );
+  }
+
+  log(`\n  ✓ /api/search special cases passed (${SPECIAL_CASE_EMPLOYER}, ${SPECIAL_CASE_JOB})`);
 
   console.log("\nAll smoke checks passed.");
 }

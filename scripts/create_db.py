@@ -6,7 +6,8 @@ Flow:
   1. Generate h1b_wages_export.sql (INSERT statements) from parsed_output.csv
   2. Flush local D1 (drop h1b_wages and related tables)
   3. Create schema + load data + indexes via wrangler
-  4. Export distinct employer|job_title pairs to distinct_employer_job_pairs.txt
+  4. Apply OpenRefine merge SQL (employer_name, job_title) if present under scripts/
+  5. Export distinct employer|job_title pairs to distinct_employer_job_pairs.txt
 
 No intermediate h1b_wages.db is created. Local D1 is the single source of truth.
 """
@@ -99,11 +100,11 @@ def find_local_d1_db():
 
 def main():
     if not os.path.exists(CSV_PATH):
-        print(f"Error: {CSV_PATH} not found. Run data_parsing.py first.")
+        print(f"Error: {CSV_PATH} not found. Run scripts/data_parsing.py first.")
         sys.exit(1)
 
     # Step 1: Generate h1b_wages_export.sql from parsed_output.csv
-    print("Step 1/4: Generating h1b_wages_export.sql from parsed_output.csv...")
+    print("Step 1/5: Generating h1b_wages_export.sql from parsed_output.csv...")
     cols_str = "id, " + ", ".join(DB_COLUMNS)
     row_count = 0
 
@@ -122,7 +123,7 @@ def main():
     print(f"  Done: {row_count:,} rows -> {EXPORT_SQL_PATH} ({sql_size_mb:.1f} MB)")
 
     # Step 2: Flush and seed local D1
-    print("\nStep 2/4: Flushing and seeding local D1...")
+    print("\nStep 2/5: Flushing and seeding local D1...")
     run_wrangler(
         ["--command", "DROP TABLE IF EXISTS h1b_wages;"],
         "Dropping existing tables..."
@@ -140,14 +141,30 @@ def main():
         "Creating composite indexes..."
     )
 
-    # Verify
+    # Step 3: OpenRefine cluster merges (employer then job title)
+    print("\nStep 3/5: OpenRefine employer/job title updates (if scripts present)...")
+    openrefine_files = (
+        "openrefine_employer_name_updates.sql",
+        "openrefine_job_title_updates.sql",
+    )
+    for sql_name in openrefine_files:
+        sql_path = os.path.join(SCRIPT_DIR, sql_name)
+        if not os.path.isfile(sql_path):
+            print(f"  (skip) {sql_name} not found under scripts/")
+            continue
+        run_wrangler(
+            [f"--file=./scripts/{sql_name}"],
+            f"Applying {sql_name} (may take several minutes for large files)...",
+        )
+
+    # Verify row count after optional updates
     run_wrangler(
         ["--command", "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages;"],
         "Verifying row count..."
     )
 
     # Step 4: Export distinct employer-job pairs from local D1
-    print("\nStep 4/4: Exporting distinct employer-job pairs...")
+    print("\nStep 4/5: Exporting distinct employer-job pairs...")
     local_db = find_local_d1_db()
     if not local_db:
         print("  WARNING: Could not find local D1 SQLite file. Skipping pairs export.")
@@ -169,6 +186,7 @@ def main():
         conn.close()
         print(f"  Done: {pair_count:,} distinct pairs -> {os.path.basename(PAIRS_PATH)}")
 
+    print("\nStep 5/5: Done.")
     print("\nLocal D1 is ready. Run: npm run dev")
 
 

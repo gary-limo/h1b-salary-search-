@@ -30,18 +30,25 @@ echo "Step 2/6: Loading h1b_wages data..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./h1b_wages_export.sql
 
 echo ""
-echo "Step 3/6: Running data quality checks..."
+echo "Step 3/6: OpenRefine employer/job title merges (if scripts present)..."
+for f in openrefine_employer_name_updates.sql openrefine_job_title_updates.sql; do
+  if [[ -f "scripts/$f" ]]; then
+    echo "  Applying scripts/$f ..."
+    npx wrangler d1 execute "$DB_NAME" --local --file="./scripts/$f"
+  else
+    echo "  (skip) scripts/$f not found"
+  fi
+done
+
+echo ""
+echo "Step 4/6: Running data quality checks..."
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c_data_quality.sql
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c1_job_title_cleanup.sql
 npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0001c2_data_quality_part2.sql
 
 echo ""
-echo "Step 4/5: Creating h1b_salary_compare table..."
-npx wrangler d1 execute "$DB_NAME" --local --file=./migrations/0002_create_salary_compare.sql
+echo "Step 5/6: Verifying..."
+npx wrangler d1 execute "$DB_NAME" --local --command "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages;"
 
 echo ""
-echo "Step 5/5: Verifying..."
-npx wrangler d1 execute "$DB_NAME" --local --command "SELECT 'h1b_wages' as tbl, COUNT(*) as cnt FROM h1b_wages UNION ALL SELECT 'h1b_salary_compare', COUNT(*) FROM h1b_salary_compare UNION ALL SELECT 'h1b_salary_summary', COUNT(*) FROM h1b_salary_summary;"
-
-echo ""
-echo "Done. Local D1 is ready. Run: npm run dev"
+echo "Step 6/6: Done. Local D1 is ready. Run: npm run dev"

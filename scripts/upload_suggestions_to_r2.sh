@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Upload public/suggestions_index.json to Cloudflare R2.
-# Run after build_suggestions_index.py (or full pipeline).
+# Run after build_suggestions_index.py. scripts/run_pipeline.sh runs this automatically:
+#   --local after building the index; --remote when using ./scripts/run_pipeline.sh --prod
 #
 # Usage:
 #   ./scripts/upload_suggestions_to_r2.sh --remote   # production R2 (default)

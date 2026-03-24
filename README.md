@@ -34,7 +34,7 @@ npm run test
 
 ## Python Scripts (Data / ML)
 
-Python scripts (e.g. `scripts/create_db.py`, `scripts/build_suggestions_index.py`, ML training) run inside a virtual environment:
+Python scripts (e.g. `scripts/data_parsing.py`, `scripts/create_db.py`, `scripts/build_suggestions_index.py`, ML training) run inside a virtual environment:
 
 ```bash
 # Create venv (one-time)
@@ -48,10 +48,11 @@ source .venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 
 # Run scripts (always with venv active)
+python scripts/data_parsing.py   # Excel → parsed_output.csv (run from repo root)
 python scripts/create_db.py
 ```
 
-Full ETL (Excel → D1 export → suggestions JSON → optional R2) is documented in [`.github/pipeline_steps.txt`](.github/pipeline_steps.txt). Run `./scripts/run_pipeline.sh` (add `--prod` to deploy D1 + upload suggestions to production R2).
+Full ETL (Excel → D1 export → suggestions JSON → local R2 upload) is documented in [`.github/pipeline_steps.txt`](.github/pipeline_steps.txt). Run `./scripts/run_pipeline.sh`; add `--prod` to also replace production D1 and upload the index to production R2.
 
 ## Deploy
 
