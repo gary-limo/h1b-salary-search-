@@ -1,8 +1,7 @@
 H1B Salary Search — data pipeline steps
 =======================================
 
-High-level ETL diagram (Excalidraw): docs/diagrams/etl-pipeline.excalidraw
-  Open in https://excalidraw.com → Load, or open from VS Code / desktop app.
+Diagrams (PNG) under docs/diagrams/: Architecture-HighLevel.png, Data Model.png, ETL.png
 
 Run from repo root: ./scripts/run_pipeline.sh
 
