@@ -156,7 +156,7 @@ paths:
           schema:
             type: string
             enum: [employer, job]
-          description: When omitted or not `employer`/`job`, response is `{ "results": [] }`.
+          description: 'When omitted or not `employer`/`job`, response is `{ "results": [] }`.'
         - name: q
           in: query
           required: false

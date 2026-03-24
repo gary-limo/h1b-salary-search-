@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "test": "node tests/run-smoke.mjs",
     "test:smoke": "node tests/run-smoke.mjs",
-    "lint:openapi": "npx --yes @redocly/cli@1.25.0 lint openapi/openapi.yaml"
+    "lint:openapi": "npx --yes @redocly/cli@latest lint --config .redocly.yaml openapi/openapi.yaml"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

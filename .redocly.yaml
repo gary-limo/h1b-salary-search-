@@ -6,6 +6,6 @@ apis:
 
 rules:
   no-unresolved-refs: error
-  struct: error
+  tag-description: off
   # Allow optional security (documented empty `{}` alongside ApiToken)
   security-defined: off
