@@ -1,4 +1,9 @@
 # Cloudflare Workers: security + cache headers
+#
+# Many "[Report Only]" CSP lines in DevTools come from Content-Security-Policy-Report-Only
+# (often a separate Cloudflare zone rule), not from the enforcing CSP below. To quiet the
+# console: Dashboard → Rules → HTTP Response Headers (or Security) → remove or edit the
+# Report-Only CSP rule so it matches this policy or disable it.
 
 /*
   X-Content-Type-Options: nosniff
@@ -6,7 +11,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://challenges.cloudflare.com; font-src 'self'; frame-src https://challenges.cloudflare.com; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com https://challenges.cloudflare.com https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://www.google.com https://stats.g.doubleclick.net https://challenges.cloudflare.com; font-src 'self'; frame-src https://challenges.cloudflare.com; base-uri 'self'; form-action 'self'
 
 /index.html
   Cache-Control: public, max-age=300, stale-while-revalidate=3600
