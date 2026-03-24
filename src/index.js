@@ -302,6 +302,15 @@ export default {
 
       const cors = buildCorsHeaders(request);
 
+      if (url.pathname === "/api/turnstile/config" && request.method === "GET") {
+        const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
+        return jsonResponse(
+          { siteKey: isTurnstileConfigured(env) ? siteKey : null },
+          200,
+          cors
+        );
+      }
+
       if (url.pathname === "/api/turnstile/session" && request.method === "POST") {
         if (shouldRequireApiToken(env, request)) {
           if (!env.API_TOKEN) {
@@ -599,17 +608,25 @@ function isSameOrigin(request) {
     try {
       if (normHost(new URL(origin).host) === workerHost) return true;
     } catch {}
+    return false;
   }
 
   if (referer) {
     try {
       if (normHost(new URL(referer).host) === workerHost) return true;
     } catch {}
+    return false;
   }
 
   // Local dev/smoke tests from Node often omit Origin/Referer.
-  // Keep strict checks in production: this fallback is localhost-only.
-  if (!origin && !referer && isLocalDevHostname(hostname)) return true;
+  if (isLocalDevHostname(hostname)) return true;
+
+  // Same-origin GET/fetch often omits Origin; Referer may be stripped (privacy / policies).
+  // Reject obvious cross-site navigations; allow when Host matches the request URL.
+  if (request.headers.get("Sec-Fetch-Site") === "cross-site") return false;
+
+  const hostHeader = request.headers.get("Host");
+  if (hostHeader && normHost(hostHeader) === workerHost) return true;
 
   return false;
 }
