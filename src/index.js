@@ -112,13 +112,12 @@ function isLocalDevHostname(hostname) {
   return h === "localhost" || h === "127.0.0.1" || h === "::1" || h.endsWith(".localhost");
 }
 
-function shouldRequireApiToken(env, request) {
-  if (env.API_TOKEN) return true;
+/** Non-localhost API routes require a valid Turnstile session cookie (unless SKIP_TURNSTILE). */
+function shouldRequireApiAuth(env, request) {
   try {
     const { hostname } = new URL(request.url);
     return !isLocalDevHostname(hostname);
   } catch {
-    // Fail closed if URL parsing fails in production-like traffic.
     return true;
   }
 }
@@ -140,18 +139,6 @@ function isTurnstileConfigured(env) {
   const site = (env.TURNSTILE_SITE_KEY || "").trim();
   const secret = (env.TURNSTILE_SECRET_KEY || "").trim();
   return !!(site && secret);
-}
-
-function shouldRequireTurnstileSession(env, request) {
-  if (env.SKIP_TURNSTILE === "true") return false;
-  if (!isTurnstileConfigured(env)) return false;
-  try {
-    const { hostname } = new URL(request.url);
-    if (isLocalDevHostname(hostname)) return false;
-  } catch {
-    return true;
-  }
-  return true;
 }
 
 function escapeHtmlAttr(s) {
@@ -237,14 +224,6 @@ async function handleTurnstileSession(request, env, cors) {
   if (!isTurnstileConfigured(env)) {
     return jsonResponse({ error: "Turnstile is not configured." }, 503, cors);
   }
-  if (shouldRequireApiToken(env, request)) {
-    if (!env.API_TOKEN) {
-      return jsonResponse({ error: "Service unavailable." }, 503, cors);
-    }
-    if (request.headers.get("X-API-Token") !== env.API_TOKEN) {
-      return jsonResponse({ error: "Forbidden" }, 403, cors);
-    }
-  }
   let body;
   try {
     body = await request.json();
@@ -276,12 +255,37 @@ async function hasValidTurnstileSession(request, env) {
   return verifyTurnstileSessionCookie(raw, env.TURNSTILE_SECRET_KEY);
 }
 
+function randomCspNonce() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function buildContentSecurityPolicy(nonce) {
+  const n = `'nonce-${nonce}'`;
+  return [
+    "default-src 'none'",
+    `script-src 'self' ${n} https://www.googletagmanager.com https://www.google-analytics.com https://static.cloudflareinsights.com https://challenges.cloudflare.com https://www.google.com https://www.gstatic.com`,
+    "style-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+    "img-src 'self' data:",
+    "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://region1.google-analytics.com https://www.google.com https://stats.g.doubleclick.net https://challenges.cloudflare.com",
+    "font-src 'self'",
+    "frame-src https://challenges.cloudflare.com",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const staticRouteMap = {
       "/": "/index.html",
       "/record": "/record.html",
+      "/index.html": "/index.html",
+      "/record.html": "/record.html",
     };
 
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p)) || BLOCKED_PATHS.has(url.pathname)) {
@@ -312,15 +316,6 @@ export default {
       }
 
       if (url.pathname === "/api/turnstile/session" && request.method === "POST") {
-        if (shouldRequireApiToken(env, request)) {
-          if (!env.API_TOKEN) {
-            logError(env, "API_TOKEN is not set for non-localhost API traffic");
-            return jsonResponse({ error: "Service unavailable." }, 503, cors);
-          }
-          if (request.headers.get("X-API-Token") !== env.API_TOKEN) {
-            return jsonResponse({ error: "Forbidden" }, 403, cors);
-          }
-        }
         const ip = request.headers.get("cf-connecting-ip") || "unknown";
         if (shouldApplyApiRateLimit(request, env)) {
           const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
@@ -339,19 +334,12 @@ export default {
         return jsonResponse({ error: "Method not allowed" }, 405, cors);
       }
 
-      if (shouldRequireApiToken(env, request)) {
-        if (!env.API_TOKEN) {
-          logError(env, "API_TOKEN is not set for non-localhost API traffic");
+      if (shouldRequireApiAuth(env, request)) {
+        if (!isTurnstileConfigured(env)) {
+          logError(env, "Turnstile is not configured for non-localhost API traffic");
           return jsonResponse({ error: "Service unavailable." }, 503, cors);
         }
-        const token = request.headers.get("X-API-Token");
-        if (token !== env.API_TOKEN) {
-          return jsonResponse({ error: "Forbidden" }, 403, cors);
-        }
-      }
-
-      if (shouldRequireTurnstileSession(env, request)) {
-        if (!(await hasValidTurnstileSession(request, env))) {
+        if (env.SKIP_TURNSTILE !== "true" && !(await hasValidTurnstileSession(request, env))) {
           return jsonResponse(
             { error: "Verification required.", code: "turnstile_required" },
             403,
@@ -389,22 +377,19 @@ export default {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = staticRouteMap[url.pathname];
       const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+      const html = await response.text();
+      const nonce = randomCspNonce();
+      const processed = html.split("__CSP_NONCE__").join(nonce);
+      let inject = '<meta charset="UTF-8">';
       const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
-      if (env.API_TOKEN || siteKey) {
-        const html = await response.text();
-        let inject = '<meta charset="UTF-8">';
-        if (env.API_TOKEN) {
-          inject += `<meta name="api-token" content="${escapeHtmlAttr(env.API_TOKEN)}">`;
-        }
-        if (siteKey) {
-          inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
-        }
-        const injected = html.replace("<meta charset=\"UTF-8\">", inject);
-        const newHeaders = new Headers(response.headers);
-        newHeaders.delete("content-length");
-        return new Response(injected, { status: response.status, headers: newHeaders });
+      if (siteKey) {
+        inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
       }
-      return response;
+      const injected = processed.replace("<meta charset=\"UTF-8\">", inject);
+      const newHeaders = new Headers(response.headers);
+      newHeaders.delete("content-length");
+      newHeaders.set("Content-Security-Policy", buildContentSecurityPolicy(nonce));
+      return new Response(injected, { status: response.status, headers: newHeaders });
     }
 
     return env.ASSETS.fetch(request);
@@ -636,7 +621,7 @@ function buildCorsHeaders(request) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Token",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Vary": "Origin",
   };
 }
