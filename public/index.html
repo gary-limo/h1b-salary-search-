@@ -423,6 +423,14 @@ function onTurnstileCallback(token) {
 
 window.onTurnstileCallback = onTurnstileCallback;
 
+function waitForTurnstile() {
+  if (!TURNSTILE_SITE_KEY || turnstileReady) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (turnstileReady) return resolve();
+    window.addEventListener("turnstile-ready", () => resolve(), { once: true });
+  });
+}
+
 if (TURNSTILE_SITE_KEY) {
   if (searchBtn) searchBtn.disabled = true;
   const tw = $("turnstile-widget");
@@ -880,6 +888,7 @@ function apiSuggestHeaders() {
 }
 
 async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
+  await waitForTurnstile();
   const params = new URLSearchParams({ field, q: q || "" });
   if (contextEmployer) params.set("employer", contextEmployer);
   if (contextJob) params.set("job", contextJob);
@@ -891,6 +900,7 @@ async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
 
 async function ensureApiSuggestReady(force = false) {
   if (apiSuggestReady) return true;
+  await waitForTurnstile();
   const now = Date.now();
   if (!force && now < suggestProbeNextAllowedAt) return false;
   if (suggestProbeInFlight) return suggestProbeInFlight;
