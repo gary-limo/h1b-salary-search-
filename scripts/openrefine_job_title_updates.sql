@@ -7099,4 +7099,7 @@ UPDATE h1b_wages SET job_title = 'world language elementary teacher' WHERE job_t
 UPDATE h1b_wages SET job_title = 'teacher world language mandarin' WHERE job_title = 'world language teacher mandarin';
 UPDATE h1b_wages SET job_title = 'teacher world language spanish' WHERE job_title = 'world language teacher spanish';
 
+-- typo fix (not from OpenRefine cluster export)
+UPDATE h1b_wages SET job_title = 'data engineer' WHERE job_title = 'data engineeer';
+
 COMMIT;

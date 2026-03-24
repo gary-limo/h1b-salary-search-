@@ -41,7 +41,7 @@ async function getSuggestionsIndex(env, request) {
         return suggestionsIndexCache;
       }
     } catch (e) {
-      console.error("R2 suggestions index:", e);
+      logError(env, "R2 suggestions index load failed", e);
     }
   }
   if (env.ASSETS) {
@@ -54,7 +54,7 @@ async function getSuggestionsIndex(env, request) {
         return suggestionsIndexCache;
       }
     } catch (e) {
-      console.error("Fallback suggestions index (ASSETS):", e);
+      logError(env, "Fallback suggestions index load failed", e);
     }
   }
   return null;
@@ -109,6 +109,17 @@ function isLocalDevHostname(hostname) {
   return h === "localhost" || h === "127.0.0.1" || h === "::1" || h.endsWith(".localhost");
 }
 
+function shouldRequireApiToken(env, request) {
+  if (env.API_TOKEN) return true;
+  try {
+    const { hostname } = new URL(request.url);
+    return !isLocalDevHostname(hostname);
+  } catch {
+    // Fail closed if URL parsing fails in production-like traffic.
+    return true;
+  }
+}
+
 /** Apply ratelimit only in production-like traffic. Optional: SKIP_API_RATE_LIMIT=true in .dev.vars (tunnels). */
 function shouldApplyApiRateLimit(request, env) {
   if (!env.API_RATE_LIMITER) return false;
@@ -152,7 +163,11 @@ export default {
         return jsonResponse({ error: "Method not allowed" }, 405, cors);
       }
 
-      if (env.API_TOKEN) {
+      if (shouldRequireApiToken(env, request)) {
+        if (!env.API_TOKEN) {
+          logError(env, "API_TOKEN is not set for non-localhost API traffic");
+          return jsonResponse({ error: "Service unavailable." }, 503, cors);
+        }
         const token = request.headers.get("X-API-Token");
         if (token !== env.API_TOKEN) {
           return jsonResponse({ error: "Forbidden" }, 403, cors);
@@ -240,7 +255,7 @@ async function handleSearch(params, db, cors, env, ctx) {
     const edgeCached = await caches.default.match(cacheUrl);
     if (edgeCached) {
       if (ctx) {
-        ctx.waitUntil(logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "edge", duration_ms: Date.now() - t0 }));
+        ctx.waitUntil(logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "edge", duration_ms: Date.now() - t0 }));
       }
       return edgeCached;
     }
@@ -255,7 +270,7 @@ async function handleSearch(params, db, cors, env, ctx) {
         if (ctx) {
           ctx.waitUntil(Promise.all([
             caches.default.put(cacheUrl, response.clone()),
-            logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "kv", duration_ms: kvDuration }),
+            logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "kv", duration_ms: kvDuration }),
           ]));
         }
         return response;
@@ -301,19 +316,27 @@ async function handleSearch(params, db, cors, env, ctx) {
       ctx.waitUntil(Promise.all([
         caches.default.put(cacheUrl, response.clone()),
         env.SEARCH_CACHE ? env.SEARCH_CACHE.put(kvKey, JSON.stringify(payload), { expirationTtl: CACHE_TTL_KV }) : Promise.resolve(),
-        logSQL(env.SQL_LOGS, {
+        logSQL(env, env.SQL_LOGS, {
           route: "/api/search",
-          sql: resolveSQL(dataSQL, bindings),
+          query_name: "search_results",
+          query_template: "search_results_by_filters",
+          has_employer: !!employerNorm,
+          has_job: !!jobNorm,
+          has_location: !!locationNorm,
+          sort,
+          dir,
+          page,
+          page_size: pageSize,
           duration_ms: duration,
           rows_returned: total,
         }),
-        logSearch(env.SEARCH_LOGS, { ...searchMeta, cache_tier: "d1", total_results: total, duration_ms: duration }),
+        logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "d1", total_results: total, duration_ms: duration }),
       ]));
     }
 
     return response;
   } catch (err) {
-    console.error("Search error:", err);
+    logError(env, "Search handler failed", err);
     return jsonResponse({ error: "Search failed. Please try again." }, 500, cors);
   }
 }
@@ -345,7 +368,7 @@ async function handleRecord(params, db, cors) {
     }
     return jsonResponse({ result: row }, 200, cors);
   } catch (err) {
-    console.error("Record error:", err);
+    logError(null, "Record handler failed", err);
     return jsonResponse({ error: "Failed to load record." }, 500, cors);
   }
 }
@@ -385,7 +408,8 @@ function isSameOrigin(request) {
   const origin = request.headers.get("Origin");
   const referer = request.headers.get("Referer");
 
-  const workerHost = normHost(new URL(request.url).host);
+  const { host, hostname } = new URL(request.url);
+  const workerHost = normHost(host);
 
   if (origin) {
     try {
@@ -399,9 +423,9 @@ function isSameOrigin(request) {
     } catch {}
   }
 
-  // Same-host fallback: browsers sometimes omit Origin/Referer for same-origin fetch.
-  // Still requires valid API token when env.API_TOKEN is set.
-  if (!origin && !referer && workerHost) return true;
+  // Local dev/smoke tests from Node often omit Origin/Referer.
+  // Keep strict checks in production: this fallback is localhost-only.
+  if (!origin && !referer && isLocalDevHostname(hostname)) return true;
 
   return false;
 }
@@ -428,32 +452,74 @@ function r2Key(prefix) {
   return `${prefix}/${yyyy}/${mm}/${dd}/${hh}-${min}-${ss}-${rand}.json`;
 }
 
-function resolveSQL(template, params) {
-  let i = 0;
-  return template.replace(/\?/g, () => {
-    const v = params[i++];
-    if (v == null) return "NULL";
-    if (typeof v === "string") return `'${v.replace(/'/g, "''")}'`;
-    return String(v);
-  });
+function shouldLogErrors(env) {
+  // Default true for operational visibility; can disable with LOG_ERRORS=false.
+  return (env?.LOG_ERRORS || "true").toLowerCase() !== "false";
 }
 
-async function logSQL(bucket, data) {
+function shouldLogSearchTerms(env) {
+  // Default false to reduce log-injection / sensitive-input exposure.
+  return (env?.LOG_SEARCH_TERMS || "false").toLowerCase() === "true";
+}
+
+function sanitizeForLog(value, maxLen = 256) {
+  if (value == null) return value;
+  const s = String(value)
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return s.length > maxLen ? s.slice(0, maxLen) : s;
+}
+
+function sanitizeLogObject(obj) {
+  if (obj == null || typeof obj !== "object") return obj;
+  const out = Array.isArray(obj) ? [] : {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = sanitizeForLog(k, 64);
+    if (v == null || typeof v === "number" || typeof v === "boolean") {
+      out[key] = v;
+    } else if (typeof v === "string") {
+      out[key] = sanitizeForLog(v);
+    } else if (Array.isArray(v)) {
+      out[key] = v.map((x) => (typeof x === "string" ? sanitizeForLog(x) : x));
+    } else if (typeof v === "object") {
+      out[key] = sanitizeLogObject(v);
+    } else {
+      out[key] = sanitizeForLog(v);
+    }
+  }
+  return out;
+}
+
+function logError(env, message, err) {
+  if (!shouldLogErrors(env)) return;
+  const msg = sanitizeForLog(message, 120);
+  const errMsg = sanitizeForLog(err?.message || err, 200);
+  console.error(msg, errMsg || "");
+}
+
+async function logSQL(env, bucket, data) {
   if (!bucket) return;
   try {
-    const body = JSON.stringify({ ts: new Date().toISOString(), ...data });
+    const body = JSON.stringify(sanitizeLogObject({ ts: new Date().toISOString(), ...data }));
     await bucket.put(r2Key("sql"), body, { httpMetadata: { contentType: "application/json" } });
   } catch (e) {
-    console.error("SQL log error:", e);
+    logError(env, "SQL log write failed", e);
   }
 }
 
-async function logSearch(bucket, data) {
+async function logSearch(env, bucket, data) {
   if (!bucket) return;
   try {
-    const body = JSON.stringify({ ts: new Date().toISOString(), ...data });
+    const safeData = { ...data };
+    if (!shouldLogSearchTerms(env)) {
+      safeData.employer = safeData.employer ? "[REDACTED]" : null;
+      safeData.job = safeData.job ? "[REDACTED]" : null;
+      safeData.location = safeData.location ? "[REDACTED]" : null;
+    }
+    const body = JSON.stringify(sanitizeLogObject({ ts: new Date().toISOString(), ...safeData }));
     await bucket.put(r2Key("search"), body, { httpMetadata: { contentType: "application/json" } });
   } catch (e) {
-    console.error("Search log error:", e);
+    logError(env, "Search log write failed", e);
   }
 }
