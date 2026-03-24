@@ -303,9 +303,10 @@ async function handleSearch(params, db, cors, env, ctx) {
   const dataSQL = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
 
   try {
+    const session = db.withSession();
     const [countRow, rows] = await Promise.all([
-      db.prepare(countSQL).bind(...bindings).first(),
-      db.prepare(dataSQL).bind(...bindings).all(),
+      session.prepare(countSQL).bind(...bindings).first(),
+      session.prepare(dataSQL).bind(...bindings).all(),
     ]);
     const duration = Date.now() - t0;
     const total = countRow?.cnt ?? 0;
@@ -349,7 +350,8 @@ async function handleRecord(params, db, cors) {
     return jsonResponse({ error: "Invalid record ID." }, 400, cors);
   }
   try {
-    const row = await db
+    const session = db.withSession();
+    const row = await session
       .prepare(
         `SELECT id, case_number, job_title, soc_code, soc_title,
                 begin_date, end_date,
