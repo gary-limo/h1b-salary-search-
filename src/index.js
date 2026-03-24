@@ -17,6 +17,9 @@ const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 const BLOCKED_PATHS = new Set(["/suggestions_index.json"]);
 
 const SUGGESTIONS_INDEX_KEY = "suggestions_index.json";
+const TURNSTILE_SESSION_COOKIE = "h1b_ts_sess";
+const TURNSTILE_SESSION_MAX_AGE_SEC = 2 * 60 * 60;
+const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const MAX_SUGGEST_RESULTS = 100;
 const SUGGESTIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day: R2 updates visible within a day
 
@@ -133,6 +136,146 @@ function shouldApplyApiRateLimit(request, env) {
   return true;
 }
 
+function isTurnstileConfigured(env) {
+  const site = (env.TURNSTILE_SITE_KEY || "").trim();
+  const secret = (env.TURNSTILE_SECRET_KEY || "").trim();
+  return !!(site && secret);
+}
+
+function shouldRequireTurnstileSession(env, request) {
+  if (env.SKIP_TURNSTILE === "true") return false;
+  if (!isTurnstileConfigured(env)) return false;
+  try {
+    const { hostname } = new URL(request.url);
+    if (isLocalDevHostname(hostname)) return false;
+  } catch {
+    return true;
+  }
+  return true;
+}
+
+function escapeHtmlAttr(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
+}
+
+function getCookie(request, name) {
+  const header = request.headers.get("Cookie");
+  if (!header) return null;
+  const parts = header.split(";");
+  for (const part of parts) {
+    const idx = part.indexOf("=");
+    if (idx === -1) continue;
+    const k = part.slice(0, idx).trim();
+    if (k === name) return decodeURIComponent(part.slice(idx + 1).trim());
+  }
+  return null;
+}
+
+function bufToHex(buf) {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSha256Hex(message, secret) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return bufToHex(sig);
+}
+
+async function verifyTurnstileSessionCookie(raw, secret) {
+  if (!raw || !secret) return false;
+  const dot = raw.indexOf(".");
+  if (dot === -1) return false;
+  const expStr = raw.slice(0, dot);
+  const sig = raw.slice(dot + 1);
+  const exp = parseInt(expStr, 10);
+  if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
+  const expected = await hmacSha256Hex(expStr, secret);
+  return sig === expected;
+}
+
+function buildSessionSetCookie(value, maxAgeSec, request) {
+  const secure = new URL(request.url).protocol === "https:";
+  const parts = [
+    `${TURNSTILE_SESSION_COOKIE}=${encodeURIComponent(value)}`,
+    "HttpOnly",
+    "Path=/",
+    `Max-Age=${maxAgeSec}`,
+    "SameSite=Lax",
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+async function verifyTurnstileSiteverify(token, remoteip, secret) {
+  const body = JSON.stringify({
+    secret,
+    response: token,
+    ...(remoteip ? { remoteip } : {}),
+  });
+  const res = await fetch(SITEVERIFY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+  if (!res.ok) {
+    return { success: false, "error-codes": ["siteverify-http"] };
+  }
+  return res.json();
+}
+
+async function handleTurnstileSession(request, env, cors) {
+  if (!isTurnstileConfigured(env)) {
+    return jsonResponse({ error: "Turnstile is not configured." }, 503, cors);
+  }
+  if (shouldRequireApiToken(env, request)) {
+    if (!env.API_TOKEN) {
+      return jsonResponse({ error: "Service unavailable." }, 503, cors);
+    }
+    if (request.headers.get("X-API-Token") !== env.API_TOKEN) {
+      return jsonResponse({ error: "Forbidden" }, 403, cors);
+    }
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Invalid JSON." }, 400, cors);
+  }
+  const token = body?.response;
+  if (!token || typeof token !== "string" || token.length > 2048) {
+    return jsonResponse({ error: "Missing or invalid Turnstile response." }, 400, cors);
+  }
+  const remoteip = request.headers.get("cf-connecting-ip") || "";
+  const result = await verifyTurnstileSiteverify(token, remoteip, env.TURNSTILE_SECRET_KEY);
+  if (!result.success) {
+    logError(env, "Turnstile siteverify failed", (result["error-codes"] || []).join(","));
+    return jsonResponse({ error: "Verification failed." }, 400, cors);
+  }
+  const exp = Math.floor(Date.now() / 1000) + TURNSTILE_SESSION_MAX_AGE_SEC;
+  const expStr = String(exp);
+  const sig = await hmacSha256Hex(expStr, env.TURNSTILE_SECRET_KEY);
+  const cookieVal = `${expStr}.${sig}`;
+  const res = jsonResponse({ ok: true }, 200, cors);
+  res.headers.set("Set-Cookie", buildSessionSetCookie(cookieVal, TURNSTILE_SESSION_MAX_AGE_SEC, request));
+  return res;
+}
+
+async function hasValidTurnstileSession(request, env) {
+  const raw = getCookie(request, TURNSTILE_SESSION_COOKIE);
+  if (!raw) return false;
+  return verifyTurnstileSessionCookie(raw, env.TURNSTILE_SECRET_KEY);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -159,6 +302,30 @@ export default {
 
       const cors = buildCorsHeaders(request);
 
+      if (url.pathname === "/api/turnstile/session" && request.method === "POST") {
+        if (shouldRequireApiToken(env, request)) {
+          if (!env.API_TOKEN) {
+            logError(env, "API_TOKEN is not set for non-localhost API traffic");
+            return jsonResponse({ error: "Service unavailable." }, 503, cors);
+          }
+          if (request.headers.get("X-API-Token") !== env.API_TOKEN) {
+            return jsonResponse({ error: "Forbidden" }, 403, cors);
+          }
+        }
+        const ip = request.headers.get("cf-connecting-ip") || "unknown";
+        if (shouldApplyApiRateLimit(request, env)) {
+          const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
+          if (!success) {
+            return jsonResponse(
+              { error: "Too many requests. Please try again later." },
+              429,
+              { ...cors, "Retry-After": "60" }
+            );
+          }
+        }
+        return handleTurnstileSession(request, env, cors);
+      }
+
       if (request.method !== "GET") {
         return jsonResponse({ error: "Method not allowed" }, 405, cors);
       }
@@ -171,6 +338,16 @@ export default {
         const token = request.headers.get("X-API-Token");
         if (token !== env.API_TOKEN) {
           return jsonResponse({ error: "Forbidden" }, 403, cors);
+        }
+      }
+
+      if (shouldRequireTurnstileSession(env, request)) {
+        if (!(await hasValidTurnstileSession(request, env))) {
+          return jsonResponse(
+            { error: "Verification required.", code: "turnstile_required" },
+            403,
+            cors
+          );
         }
       }
 
@@ -203,12 +380,17 @@ export default {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = staticRouteMap[url.pathname];
       const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
-      if (env.API_TOKEN) {
+      const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
+      if (env.API_TOKEN || siteKey) {
         const html = await response.text();
-        const injected = html.replace(
-          '<meta charset="UTF-8">',
-          `<meta charset="UTF-8"><meta name="api-token" content="${env.API_TOKEN}">`
-        );
+        let inject = '<meta charset="UTF-8">';
+        if (env.API_TOKEN) {
+          inject += `<meta name="api-token" content="${escapeHtmlAttr(env.API_TOKEN)}">`;
+        }
+        if (siteKey) {
+          inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
+        }
+        const injected = html.replace("<meta charset=\"UTF-8\">", inject);
         const newHeaders = new Headers(response.headers);
         newHeaders.delete("content-length");
         return new Response(injected, { status: response.status, headers: newHeaders });

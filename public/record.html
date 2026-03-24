@@ -10,6 +10,7 @@
   gtag('config', 'G-FB88SFVP3D');
 </script>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://challenges.cloudflare.com">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <title>H1B Record Detail | H1B Salary Search</title>
@@ -60,6 +61,7 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
 .skeleton{background:#E2DDD6;border-radius:4px;animation:pulse 1.5s ease infinite;height:16px}
 
 .error-box{display:flex;align-items:flex-start;gap:10px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:14px 16px;font-size:13px;color:#C41E3A;margin-top:12px}
+.turnstile-host{margin:12px auto max(12px, env(safe-area-inset-bottom));max-width:100%;min-height:1px;display:flex;justify-content:center;padding:0 16px}
 
 .disclaimer{margin-top:20px;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(196,163,90,.05);border:1px solid rgba(196,163,90,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#000;line-height:1.5;text-align:center}
 
@@ -83,6 +85,7 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
     Back to Search
   </a>
 </nav>
+<div id="turnstile-widget" class="turnstile-host" aria-hidden="true"></div>
 <a href="#recordContent" class="skip-link">Skip to content</a>
 
 <main>
@@ -166,6 +169,59 @@ main{max-width:860px;margin:0 auto;padding:32px 24px 60px}
 
 <script>
 const API_TOKEN = document.querySelector('meta[name="api-token"]')?.content || '';
+const TURNSTILE_SITE_KEY = document.querySelector('meta[name="turnstile-site-key"]')?.content?.trim() || '';
+let turnstileReady = !TURNSTILE_SITE_KEY;
+
+function submitTurnstileSession(token) {
+  return fetch("/api/turnstile/session", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(API_TOKEN ? { "X-API-Token": API_TOKEN } : {}),
+    },
+    body: JSON.stringify({ response: token }),
+  });
+}
+
+function onTurnstileCallback(token) {
+  submitTurnstileSession(token)
+    .then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Verification failed (${res.status})`);
+      }
+      turnstileReady = true;
+      window.dispatchEvent(new CustomEvent("turnstile-ready"));
+    })
+    .catch((e) => {
+      console.error(e);
+      const errBox = document.getElementById("errorBox");
+      const errMsg = document.getElementById("errorMsg");
+      if (errMsg) errMsg.textContent = "Security check failed. Please refresh the page.";
+      if (errBox) errBox.style.display = "flex";
+    });
+}
+
+window.onTurnstileCallback = onTurnstileCallback;
+
+if (TURNSTILE_SITE_KEY) {
+  const tw = document.getElementById("turnstile-widget");
+  if (tw) {
+    tw.setAttribute("class", "cf-turnstile turnstile-host");
+    tw.setAttribute("data-sitekey", TURNSTILE_SITE_KEY);
+    tw.setAttribute("data-callback", "onTurnstileCallback");
+    tw.setAttribute("data-theme", "light");
+    tw.setAttribute("data-size", "flexible");
+  }
+  const s = document.createElement("script");
+  s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  s.async = true;
+  s.defer = true;
+  document.head.appendChild(s);
+}
+
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 function fmtUSD(v) { return v == null ? null : usd.format(v); }
 function toTitleCase(s) { if (!s) return s; return s.replace(/\b\w/g, c => c.toUpperCase()); }
@@ -193,10 +249,15 @@ function cityStateZip(city, state, zip) {
 
 async function loadRecord(id) {
   const res = await fetch(`/api/record?id=${encodeURIComponent(id)}`, {
+    credentials: "include",
     headers: API_TOKEN ? { "X-API-Token": API_TOKEN } : {},
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 403 && err.code === "turnstile_required") {
+      turnstileReady = false;
+      throw new Error("Session expired. Please refresh the page.");
+    }
     throw new Error(err.error || `Error ${res.status}`);
   }
   return (await res.json()).result;
@@ -213,6 +274,24 @@ async function init() {
     document.getElementById("errorMsg").textContent = "No valid record ID provided.";
     document.getElementById("errorBox").style.display = "flex";
     return;
+  }
+
+  if (TURNSTILE_SITE_KEY && !turnstileReady) {
+    document.getElementById("pageTitle").textContent = "Verifying…";
+    try {
+      await new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("Security check timed out. Please refresh.")), 120000);
+        window.addEventListener("turnstile-ready", () => {
+          clearTimeout(t);
+          resolve();
+        }, { once: true });
+      });
+    } catch (e) {
+      document.getElementById("pageTitle").textContent = "Verification required";
+      document.getElementById("errorMsg").textContent = e.message || "Please refresh the page.";
+      document.getElementById("errorBox").style.display = "flex";
+      return;
+    }
   }
 
   try {

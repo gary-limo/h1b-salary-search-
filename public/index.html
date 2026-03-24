@@ -9,6 +9,7 @@
   gtag('config', 'G-FB88SFVP3D');
 </script>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://challenges.cloudflare.com">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <title>H1B Salary Search | H1b Visa Wages </title>
@@ -106,6 +107,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .btn-search{flex:1;height:42px;background:#C41E3A;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s;letter-spacing:-.2px}
 .btn-search:hover{background:#A01830}
 .btn-search:disabled{background:#9B1629;cursor:not-allowed}
+.turnstile-host{margin:8px auto 0;max-width:100%;min-height:1px;display:flex;justify-content:center}
 .btn-clear{width:42px;height:42px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:rgba(255,255,255,.6);cursor:pointer;display:none;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
 .btn-clear:hover{background:rgba(255,255,255,.18)}
 .btn-clear.show{display:flex}
@@ -294,6 +296,7 @@ th.th-filterable{position:relative}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
+      <div id="turnstile-widget" class="turnstile-host" aria-hidden="true"></div>
     </form>
 
     <div class="popular">
@@ -338,6 +341,7 @@ th.th-filterable{position:relative}
 
 <script>
 const API_TOKEN = document.querySelector('meta[name="api-token"]')?.content || '';
+const TURNSTILE_SITE_KEY = document.querySelector('meta[name="turnstile-site-key"]')?.content?.trim() || '';
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 75];
 
@@ -383,6 +387,59 @@ const empInput = $("empInput"), jobInput = $("jobInput"), locInput = $("locInput
 const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), locFieldInner = $("locFieldInner");
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
 
+let turnstileReady = !TURNSTILE_SITE_KEY;
+
+function submitTurnstileSession(token) {
+  return fetch("/api/turnstile/session", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(API_TOKEN ? { "X-API-Token": API_TOKEN } : {}),
+    },
+    body: JSON.stringify({ response: token }),
+  });
+}
+
+function onTurnstileCallback(token) {
+  submitTurnstileSession(token)
+    .then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Verification failed (${res.status})`);
+      }
+      turnstileReady = true;
+      if (searchBtn) searchBtn.disabled = false;
+      window.dispatchEvent(new CustomEvent("turnstile-ready"));
+    })
+    .catch((e) => {
+      console.error(e);
+      $("resultsWrap")?.classList.add("show");
+      if ($("errorMsg")) $("errorMsg").textContent = "Security check failed. Please refresh the page.";
+      $("errorBox")?.classList.remove("hidden");
+    });
+}
+
+window.onTurnstileCallback = onTurnstileCallback;
+
+if (TURNSTILE_SITE_KEY) {
+  if (searchBtn) searchBtn.disabled = true;
+  const tw = $("turnstile-widget");
+  if (tw) {
+    tw.setAttribute("class", "cf-turnstile turnstile-host");
+    tw.setAttribute("data-sitekey", TURNSTILE_SITE_KEY);
+    tw.setAttribute("data-callback", "onTurnstileCallback");
+    tw.setAttribute("data-theme", "light");
+    tw.setAttribute("data-size", "flexible");
+  }
+  const s = document.createElement("script");
+  s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  s.async = true;
+  s.defer = true;
+  document.head.appendChild(s);
+}
+
 function applyResultFilters(records) {
   const emp  = filterEmp.trim().toLowerCase();
   const job  = filterJob.trim().toLowerCase();
@@ -402,10 +459,16 @@ async function fetchPage(emp, job, loc) {
     page: currentPage, pageSize: currentPageSize, sort: sortCol, dir: sortDir,
   });
   const res = await fetch(`/api/search?${params}`, {
+    credentials: "include",
     headers: API_TOKEN ? { "X-API-Token": API_TOKEN } : {},
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 403 && err.code === "turnstile_required") {
+      turnstileReady = false;
+      if (TURNSTILE_SITE_KEY && searchBtn) searchBtn.disabled = true;
+      throw new Error("Session expired. Please refresh the page.");
+    }
     throw new Error(err.error || `Request failed (${res.status})`);
   }
   const data = await res.json();
@@ -738,7 +801,7 @@ async function executeSearch() {
   try {
     await runPage();
   } finally {
-    searchBtn.disabled        = false;
+    searchBtn.disabled = TURNSTILE_SITE_KEY ? !turnstileReady : false;
     searchBtnText.textContent = "Search Salaries";
     $("skeletonTable").innerHTML = "";
   }
@@ -820,7 +883,7 @@ async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
   const params = new URLSearchParams({ field, q: q || "" });
   if (contextEmployer) params.set("employer", contextEmployer);
   if (contextJob) params.set("job", contextJob);
-  const res = await fetch(`/api/suggest?${params}`, { headers: apiSuggestHeaders() });
+  const res = await fetch(`/api/suggest?${params}`, { credentials: "include", headers: apiSuggestHeaders() });
   if (!res.ok) return null;
   const data = await res.json();
   return Array.isArray(data.results) ? data.results : null;
@@ -834,7 +897,7 @@ async function ensureApiSuggestReady(force = false) {
 
   suggestProbeInFlight = (async () => {
     try {
-      const res = await fetch("/api/suggest?field=employer&q=", { headers: apiSuggestHeaders() });
+      const res = await fetch("/api/suggest?field=employer&q=", { credentials: "include", headers: apiSuggestHeaders() });
       if (res.ok) {
         apiSuggestReady = true;
         return true;

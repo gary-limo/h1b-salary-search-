@@ -47,6 +47,10 @@
 			"database_id": "ccf362fd-f4d0-4bb2-b17e-7ac0c9055af5"
 		}
 	],
+	"vars": {
+		// Public Turnstile site key (dashboard). Secret: wrangler secret put TURNSTILE_SECRET_KEY
+		"TURNSTILE_SITE_KEY": "0x4AAAAAACpMAht26069bwdj"
+	},
 	"ratelimits": [
 		{
 			"name": "API_RATE_LIMITER",

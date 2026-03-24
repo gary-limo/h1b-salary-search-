@@ -32,7 +32,7 @@ npm run test
 # More sample rows per case: SMOKE_SAMPLE_ROWS=5 npm run test
 ```
 
-## Python Scripts (Data / ML)
+## Python Scripts 
 
 Python scripts (e.g. `scripts/data_parsing.py`, `scripts/create_db.py`, `scripts/build_suggestions_index.py`, ML training) run inside a virtual environment:
 
@@ -59,6 +59,16 @@ Full ETL (Excel → D1 export → suggestions JSON → local R2 upload) is docum
 ```bash
 npm run deploy
 ```
+
+### Turnstile (optional)
+
+To reduce automated abuse, enable [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/): create a widget in the dashboard, set **`TURNSTILE_SITE_KEY`** in `wrangler.jsonc` under `vars` (public site key), then store the **secret key** in the Worker:
+
+```bash
+npx wrangler secret put TURNSTILE_SECRET_KEY
+```
+
+If either value is missing, Turnstile stays **off** and behavior matches a normal deploy. With both set, browsers must complete the widget once; the Worker sets an **HttpOnly** session cookie (about **2 hours**) so legitimate users are not challenged on every search. **Localhost** and **`SKIP_TURNSTILE=true`** (e.g. in `.dev.vars`) skip the check for development and smoke tests.
 
 ## Data Source
 
