@@ -590,26 +590,37 @@ function normHost(host) {
 }
 
 function isSameOrigin(request) {
+  const origin = request.headers.get("Origin");
+  const referer = request.headers.get("Referer");
+
   const { host, hostname } = new URL(request.url);
   const workerHost = normHost(host);
 
-  const hostHeader = request.headers.get("Host");
-  if (!hostHeader || normHost(hostHeader) !== workerHost) return false;
-
-  const origin = request.headers.get("Origin");
   if (origin) {
     try {
-      return normHost(new URL(origin).host) === workerHost;
-    } catch {
-      return false;
-    }
+      if (normHost(new URL(origin).host) === workerHost) return true;
+    } catch {}
+    return false;
   }
 
+  if (referer) {
+    try {
+      if (normHost(new URL(referer).host) === workerHost) return true;
+    } catch {}
+    return false;
+  }
+
+  // Local dev/smoke tests from Node often omit Origin/Referer.
   if (isLocalDevHostname(hostname)) return true;
 
-  // No Origin: same-origin GET/fetch, or top-level navigation (e.g. from search/email).
-  // Cross-origin fetch abuse is blocked when Origin is present and mismatched above.
-  return true;
+  // Same-origin GET/fetch often omits Origin; Referer may be stripped (privacy / policies).
+  // Reject obvious cross-site navigations; allow when Host matches the request URL.
+  if (request.headers.get("Sec-Fetch-Site") === "cross-site") return false;
+
+  const hostHeader = request.headers.get("Host");
+  if (hostHeader && normHost(hostHeader) === workerHost) return true;
+
+  return false;
 }
 
 function buildCorsHeaders(request) {
