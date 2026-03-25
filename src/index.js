@@ -349,8 +349,12 @@ export default {
         }
       }
 
+      // Rate limit DB search only; /api/suggest is high-frequency while typing.
       const ip = request.headers.get("cf-connecting-ip") || "unknown";
-      if (shouldApplyApiRateLimit(request, env)) {
+      if (
+        url.pathname === "/api/search" &&
+        shouldApplyApiRateLimit(request, env)
+      ) {
         const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
         if (!success) {
           return jsonResponse(
