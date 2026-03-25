@@ -49,7 +49,9 @@
 	],
 	"vars": {
 		// Public Turnstile site key (dashboard). Secret: wrangler secret put TURNSTILE_SECRET_KEY
-		"TURNSTILE_SITE_KEY": "0x4AAAAAACpMAht26069bwdj"
+		"TURNSTILE_SITE_KEY": "0x4AAAAAACpMAht26069bwdj",
+		// Bump (e.g. 1 → 2) and redeploy to invalidate all /api/search KV + Workers Cache API entries globally.
+		"SEARCH_CACHE_VERSION": "1"
 	},
 	"ratelimits": [
 		{

@@ -403,8 +403,14 @@ export default {
 const CACHE_TTL_EDGE = 86400;
 const CACHE_TTL_KV   = 7776000;
 
-function buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize) {
-  return `search:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
+/** Bump wrangler var SEARCH_CACHE_VERSION and redeploy for global search cache invalidation (KV + edge). */
+function searchCacheVersion(env) {
+  const s = String(env?.SEARCH_CACHE_VERSION ?? "1").trim();
+  return s || "1";
+}
+
+function buildSearchCacheKey(version, employer, job, location, sort, dir, page, pageSize) {
+  return `search:v${version}:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
 }
 
 async function handleSearch(params, db, cors, env, ctx) {
@@ -426,8 +432,9 @@ async function handleSearch(params, db, cors, env, ctx) {
   const dir = dirParam === "ASC" ? "ASC" : "DESC";
   const offset = (page - 1) * pageSize;
 
-  const kvKey = buildSearchCacheKey(employer, job, location, sort, dir, page, pageSize);
-  const cacheUrl = new Request(`https://cache.internal/${kvKey}`);
+  const cacheVer = searchCacheVersion(env);
+  const kvKey = buildSearchCacheKey(cacheVer, employer, job, location, sort, dir, page, pageSize);
+  const cacheUrl = new Request(`https://cache.internal/${encodeURIComponent(kvKey)}`);
   const searchMeta = { employer: employer || null, job: job || null, location: location || null, sort, dir, page, page_size: pageSize };
 
   const t0 = Date.now();
@@ -525,10 +532,12 @@ async function handleSearch(params, db, cors, env, ctx) {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function handleRecord(params, db, cors) {
-  const id = (params.get("id") || "").trim().slice(0, 50);
-  if (!id || !UUID_REGEX.test(id)) {
+  const idRaw = (params.get("id") || "").trim().slice(0, 50);
+  if (!idRaw || !UUID_REGEX.test(idRaw)) {
     return jsonResponse({ error: "Invalid record ID." }, 400, cors);
   }
+  // SQLite TEXT equality is case-sensitive; normalize so URL case matches stored id.
+  const id = idRaw.toLowerCase();
   try {
     const session = db.withSession();
     const row = await session
