@@ -79,11 +79,27 @@ function searchFromIndex(index, field, q, contextEmployer, contextJob) {
     }
     return [];
   }
+
+  // Non-empty query: search only within the contextual set (small, in-memory) when the other
+  // dimension is known — not the full global employers/jobs arrays.
+  let candidates;
+  if (field === "job" && contextEmployer) {
+    const arr = index.employerToJobs[contextEmployer.toLowerCase()];
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+    candidates = [...new Set(arr)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  } else if (field === "employer" && contextJob) {
+    const arr = index.jobToEmployers[contextJob.toLowerCase()];
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+    candidates = [...new Set(arr)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  } else {
+    candidates = list;
+  }
+
   const seen = new Set();
   const prefix = [];
   const substr = [];
 
-  for (const s of list) {
+  for (const s of candidates) {
     if (seen.has(s)) continue;
     const sl = s.toLowerCase();
     if (sl.startsWith(ql)) {
@@ -142,14 +158,29 @@ function isTurnstileConfigured(env) {
   return !!(site && secret);
 }
 
+/** Only `/api/search` and `/api/record` need a session cookie; `/api/suggest` is in-memory index only. */
 function shouldRequireTurnstileSession(env, request) {
   if (env.SKIP_TURNSTILE === "true") return false;
   if (!isTurnstileConfigured(env)) return false;
   try {
+    const { hostname, pathname } = new URL(request.url);
+    if (isLocalDevHostname(hostname)) return false;
+    if (pathname !== "/api/search" && pathname !== "/api/record") return false;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/** Avoid loading the Turnstile iframe on localhost (http) — mismatched with challenges.cloudflare.com (https) causes 110200 / frame errors. */
+function shouldExposeTurnstileWidget(request, env) {
+  if (!isTurnstileConfigured(env)) return false;
+  if (env.TURNSTILE_SHOW_ON_LOCALHOST === "true") return true;
+  try {
     const { hostname } = new URL(request.url);
     if (isLocalDevHostname(hostname)) return false;
   } catch {
-    return true;
+    /* fall through */
   }
   return true;
 }
@@ -304,11 +335,8 @@ export default {
 
       if (url.pathname === "/api/turnstile/config" && request.method === "GET") {
         const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
-        return jsonResponse(
-          { siteKey: isTurnstileConfigured(env) ? siteKey : null },
-          200,
-          cors
-        );
+        const expose = shouldExposeTurnstileWidget(request, env);
+        return jsonResponse({ siteKey: expose ? siteKey : null }, 200, cors);
       }
 
       if (url.pathname === "/api/turnstile/session" && request.method === "POST") {
@@ -390,13 +418,14 @@ export default {
       assetUrl.pathname = staticRouteMap[url.pathname];
       const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
       const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
-      if (env.API_TOKEN || siteKey) {
+      const exposeTurnstile = shouldExposeTurnstileWidget(request, env);
+      if (env.API_TOKEN || (siteKey && exposeTurnstile)) {
         const html = await response.text();
         let inject = '<meta charset="UTF-8">';
         if (env.API_TOKEN) {
           inject += `<meta name="api-token" content="${escapeHtmlAttr(env.API_TOKEN)}">`;
         }
-        if (siteKey) {
+        if (siteKey && exposeTurnstile) {
           inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
         }
         const injected = html.replace("<meta charset=\"UTF-8\">", inject);

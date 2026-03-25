@@ -4,3 +4,6 @@
 # Optional: if wrangler dev uses a tunnel URL (not localhost), API rate limits still apply.
 # Set this so the Worker skips rate limits (same as localhost behavior).
 # SKIP_API_RATE_LIMIT=true
+
+# Optional: load Turnstile on localhost (default: off to avoid http/https console errors).
+# TURNSTILE_SHOW_ON_LOCALHOST=true

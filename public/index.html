@@ -888,7 +888,6 @@ function apiSuggestHeaders() {
 }
 
 async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
-  await waitForTurnstile();
   const params = new URLSearchParams({ field, q: q || "" });
   if (contextEmployer) params.set("employer", contextEmployer);
   if (contextJob) params.set("job", contextJob);
@@ -900,7 +899,6 @@ async function fetchApiSuggest(field, q, contextEmployer, contextJob) {
 
 async function ensureApiSuggestReady(force = false) {
   if (apiSuggestReady) return true;
-  await waitForTurnstile();
   const now = Date.now();
   if (!force && now < suggestProbeNextAllowedAt) return false;
   if (suggestProbeInFlight) return suggestProbeInFlight;
@@ -966,11 +964,20 @@ async function showRelatedSuggestions(selectedField, selectedValue) {
   otherDD.innerHTML = "";
 }
 
+function acEffectiveEmployer() {
+  return (selEmp || empInput.value.trim()).trim();
+}
+function acEffectiveJob() {
+  return (selJob || jobInput.value.trim()).trim();
+}
+
 function acGetContext(field) {
   const ctx = {};
-  if (field !== "employer" && selEmp) ctx.employer = selEmp;
-  if (field !== "job"      && selJob) ctx.job      = selJob;
-  if (field !== "location" && selLoc) ctx.location  = selLoc;
+  const effEmp = acEffectiveEmployer();
+  const effJob = acEffectiveJob();
+  if (field !== "employer" && effEmp) ctx.employer = effEmp;
+  if (field !== "job" && effJob) ctx.job = effJob;
+  if (field !== "location" && selLoc) ctx.location = selLoc;
   return ctx;
 }
 
@@ -1021,7 +1028,9 @@ function acSetup(input, dropdownId, field) {
   }
 
   async function fetchSuggest(q) {
-    const hasCtx = (field === "employer" && selJob) || (field === "job" && selEmp);
+    const effEmp = acEffectiveEmployer();
+    const effJob = acEffectiveJob();
+    const hasCtx = (field === "employer" && effJob) || (field === "job" && effEmp);
     if (!hasCtx && q.length < 2) { closeDD(); return; }
     if (!apiSuggestReady) {
       const ready = await ensureApiSuggestReady();
@@ -1030,13 +1039,15 @@ function acSetup(input, dropdownId, field) {
     dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
     dd.className = "dropdown open";
     clearTimeout(acTimers[field]);
+    const ctxEmp = field === "job" ? effEmp || undefined : selEmp || undefined;
+    const ctxJob = field === "employer" ? effJob || undefined : selJob || undefined;
     acTimers[field] = setTimeout(async () => {
       try {
-        const results = await fetchApiSuggest(field, q, selEmp || undefined, selJob || undefined);
+        const results = await fetchApiSuggest(field, q, ctxEmp, ctxJob);
         if (results !== null) renderItems(results);
         else closeDD();
       } catch { closeDD(); }
-    }, 120);
+    }, 50);
   }
 
   input.addEventListener("input", () => {
