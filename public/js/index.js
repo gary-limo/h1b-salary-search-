@@ -530,6 +530,8 @@ POPULAR.forEach(item => {
 
 let selEmp = "", selJob = "", selLoc = "";
 const acTimers = {};
+/** Bumps on each suggest invocation; drop responses that are not for the latest query. */
+const suggestSeq = { employer: 0, job: 0, location: 0 };
 
 let apiSuggestReady = false;
 let suggestProbeInFlight = null;
@@ -681,6 +683,8 @@ function acSetup(input, dropdownId, field) {
   }
 
   async function fetchSuggest(q) {
+    suggestSeq[field]++;
+    const seq = suggestSeq[field];
     const effEmp = acEffectiveEmployer();
     const effJob = acEffectiveJob();
     const hasCtx = (field === "employer" && effJob) || (field === "job" && effEmp);
@@ -689,14 +693,17 @@ function acSetup(input, dropdownId, field) {
       const ready = await ensureApiSuggestReady();
       if (!ready) { closeDD(); return; }
     }
+    if (seq !== suggestSeq[field]) return;
     dd.innerHTML = '<div class="dropdown-loading">Searching\u2026</div>';
     dd.className = "dropdown open";
     clearTimeout(acTimers[field]);
     const ctxEmp = field === "job" ? effEmp || undefined : selEmp || undefined;
     const ctxJob = field === "employer" ? effJob || undefined : selJob || undefined;
     acTimers[field] = setTimeout(async () => {
+      if (seq !== suggestSeq[field]) return;
       try {
         const results = await fetchApiSuggest(field, q, ctxEmp, ctxJob);
+        if (seq !== suggestSeq[field]) return;
         if (results !== null) renderItems(results);
         else closeDD();
       } catch { closeDD(); }
