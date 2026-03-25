@@ -158,14 +158,14 @@ function isTurnstileConfigured(env) {
   return !!(site && secret);
 }
 
-/** Only `/api/search` and `/api/record` need a session cookie; `/api/suggest` is in-memory index only. */
+/** Only `GET /api/search` needs a Turnstile session (salary table); suggest/record are ungated. */
 function shouldRequireTurnstileSession(env, request) {
   if (env.SKIP_TURNSTILE === "true") return false;
   if (!isTurnstileConfigured(env)) return false;
   try {
     const { hostname, pathname } = new URL(request.url);
     if (isLocalDevHostname(hostname)) return false;
-    if (pathname !== "/api/search" && pathname !== "/api/record") return false;
+    if (pathname !== "/api/search") return false;
   } catch {
     return false;
   }
