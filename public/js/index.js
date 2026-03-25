@@ -45,6 +45,8 @@ const empFieldInner = $("empFieldInner"), jobFieldInner = $("jobFieldInner"), lo
 const searchBtn = $("searchBtn"), searchBtnText = $("searchBtnText");
 
 let turnstileReady = !TURNSTILE_SITE_KEY;
+/** Set by explicit `turnstile.render` so we can `remove()` after success. */
+let turnstileWidgetId = null;
 
 function submitTurnstileSession(token) {
   return fetch("/api/turnstile/session", {
@@ -58,6 +60,44 @@ function submitTurnstileSession(token) {
   });
 }
 
+function hideTurnstileWidget() {
+  const tw = $("turnstile-widget");
+  if (!tw) return;
+  if (window.turnstile && turnstileWidgetId != null) {
+    try {
+      window.turnstile.remove(turnstileWidgetId);
+    } catch (e) {
+      /* ignore */
+    }
+    turnstileWidgetId = null;
+  }
+  tw.innerHTML = "";
+  tw.classList.add("turnstile-hidden");
+  tw.setAttribute("aria-hidden", "true");
+}
+
+function mountTurnstileWidget() {
+  const tw = $("turnstile-widget");
+  if (!tw || !TURNSTILE_SITE_KEY || !window.turnstile) return;
+  if (turnstileWidgetId != null) {
+    try {
+      window.turnstile.remove(turnstileWidgetId);
+    } catch (e) {
+      /* ignore */
+    }
+    turnstileWidgetId = null;
+  }
+  tw.innerHTML = "";
+  tw.classList.remove("turnstile-hidden");
+  tw.setAttribute("aria-hidden", "false");
+  turnstileWidgetId = window.turnstile.render(tw, {
+    sitekey: TURNSTILE_SITE_KEY,
+    callback: onTurnstileCallback,
+    theme: "light",
+    size: "flexible",
+  });
+}
+
 function onTurnstileCallback(token) {
   submitTurnstileSession(token)
     .then(async (res) => {
@@ -67,6 +107,7 @@ function onTurnstileCallback(token) {
       }
       turnstileReady = true;
       if (searchBtn) searchBtn.disabled = false;
+      hideTurnstileWidget();
       window.dispatchEvent(new CustomEvent("turnstile-ready"));
     })
     .catch((e) => {
@@ -76,8 +117,6 @@ function onTurnstileCallback(token) {
       $("errorBox")?.classList.remove("hidden");
     });
 }
-
-window.onTurnstileCallback = onTurnstileCallback;
 
 function waitForTurnstile() {
   if (!TURNSTILE_SITE_KEY || turnstileReady) return Promise.resolve();
@@ -89,18 +128,11 @@ function waitForTurnstile() {
 
 if (TURNSTILE_SITE_KEY) {
   if (searchBtn) searchBtn.disabled = true;
-  const tw = $("turnstile-widget");
-  if (tw) {
-    tw.setAttribute("class", "cf-turnstile turnstile-host");
-    tw.setAttribute("data-sitekey", TURNSTILE_SITE_KEY);
-    tw.setAttribute("data-callback", "onTurnstileCallback");
-    tw.setAttribute("data-theme", "light");
-    tw.setAttribute("data-size", "flexible");
-  }
   const s = document.createElement("script");
   s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
   s.async = true;
   s.defer = true;
+  s.onload = () => mountTurnstileWidget();
   document.head.appendChild(s);
 }
 
@@ -130,7 +162,8 @@ async function fetchPage(emp, job, loc) {
     if (res.status === 403 && err.code === "turnstile_required") {
       turnstileReady = false;
       if (TURNSTILE_SITE_KEY && searchBtn) searchBtn.disabled = true;
-      throw new Error("Session expired. Please refresh the page.");
+      if (window.turnstile) mountTurnstileWidget();
+      throw new Error("Session expired. Complete the security check again.");
     }
     throw new Error(err.error || `Request failed (${res.status})`);
   }
