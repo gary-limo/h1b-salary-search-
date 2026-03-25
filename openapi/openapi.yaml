@@ -6,9 +6,8 @@ info:
     require a matching `Origin` or `Referer` host, or no `Origin`/`Referer` (same-host fetch).
     Cross-origin API calls without a valid same-host `Origin`/`Referer` receive **403**.
 
-    Production (non-localhost): same-origin requests must include a valid **Turnstile session**
-    cookie (`HttpOnly`) after the widget completes. Local `wrangler dev` on localhost skips
-    this gate. There is no API key header.
+    When `API_TOKEN` is configured in the Worker environment, include header **X-API-Token**
+    with that value; otherwise the API returns **403** with `{ "error": "Forbidden" }`.
 
     Rate limiting may return **429** with `Retry-After: 60` in production (not applied on
     localhost / `127.0.0.1` / `::1` / `*.localhost`, or when `SKIP_API_RATE_LIMIT=true`).
@@ -74,6 +73,9 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/SearchFailed"
+      security:
+        - ApiToken: []
+        - {}
 
   /api/record:
     get:
@@ -133,6 +135,9 @@ paths:
                 loadFailed:
                   value:
                     error: Failed to load record.
+      security:
+        - ApiToken: []
+        - {}
 
   /api/suggest:
     get:
@@ -174,8 +179,18 @@ paths:
           $ref: "#/components/responses/MethodNotAllowed"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+      security:
+        - ApiToken: []
+        - {}
 
 components:
+  securitySchemes:
+    ApiToken:
+      type: apiKey
+      in: header
+      name: X-API-Token
+      description: Required only when the Worker has `API_TOKEN` set.
+
   parameters:
     EmployerQuery:
       name: employer
