@@ -1,4 +1,3 @@
-const API_TOKEN = document.querySelector('meta[name="api-token"]')?.content || '';
 const TURNSTILE_SITE_KEY = document.querySelector('meta[name="turnstile-site-key"]')?.content?.trim() || '';
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 75];
@@ -54,7 +53,6 @@ function submitTurnstileSession(token) {
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
-      ...(API_TOKEN ? { "X-API-Token": API_TOKEN } : {}),
     },
     body: JSON.stringify({ response: token }),
   });
@@ -126,7 +124,6 @@ async function fetchPage(emp, job, loc) {
   });
   const res = await fetch(`/api/search?${params}`, {
     credentials: "include",
-    headers: API_TOKEN ? { "X-API-Token": API_TOKEN } : {},
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -540,9 +537,7 @@ let suggestProbeNextAllowedAt = 0;
 const SUGGEST_PROBE_COOLDOWN_MS = 10000;
 
 function apiSuggestHeaders() {
-  const h = { Accept: "application/json" };
-  if (API_TOKEN) h["X-API-Token"] = API_TOKEN;
-  return h;
+  return { Accept: "application/json" };
 }
 
 async function fetchApiSuggest(field, q, contextEmployer, contextJob) {

@@ -13,9 +13,7 @@ const QUIET = process.env.SMOKE_QUIET === "1";
 const SAMPLE_ROWS = Math.min(15, Math.max(1, Number(process.env.SMOKE_SAMPLE_ROWS) || 3));
 
 function apiHeaders() {
-  const h = { Accept: "application/json" };
-  if (process.env.API_TOKEN) h["X-API-Token"] = process.env.API_TOKEN;
-  return h;
+  return { Accept: "application/json" };
 }
 
 function log(...args) {

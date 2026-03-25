@@ -128,17 +128,6 @@ function isLocalDevHostname(hostname) {
   return h === "localhost" || h === "127.0.0.1" || h === "::1" || h.endsWith(".localhost");
 }
 
-function shouldRequireApiToken(env, request) {
-  if (env.API_TOKEN) return true;
-  try {
-    const { hostname } = new URL(request.url);
-    return !isLocalDevHostname(hostname);
-  } catch {
-    // Fail closed if URL parsing fails in production-like traffic.
-    return true;
-  }
-}
-
 /** Apply ratelimit only in production-like traffic. Optional: SKIP_API_RATE_LIMIT=true in .dev.vars (tunnels). */
 function shouldApplyApiRateLimit(request, env) {
   if (!env.API_RATE_LIMITER) return false;
@@ -268,14 +257,6 @@ async function handleTurnstileSession(request, env, cors) {
   if (!isTurnstileConfigured(env)) {
     return jsonResponse({ error: "Turnstile is not configured." }, 503, cors);
   }
-  if (shouldRequireApiToken(env, request)) {
-    if (!env.API_TOKEN) {
-      return jsonResponse({ error: "Service unavailable." }, 503, cors);
-    }
-    if (request.headers.get("X-API-Token") !== env.API_TOKEN) {
-      return jsonResponse({ error: "Forbidden" }, 403, cors);
-    }
-  }
   let body;
   try {
     body = await request.json();
@@ -340,15 +321,6 @@ export default {
       }
 
       if (url.pathname === "/api/turnstile/session" && request.method === "POST") {
-        if (shouldRequireApiToken(env, request)) {
-          if (!env.API_TOKEN) {
-            logError(env, "API_TOKEN is not set for non-localhost API traffic");
-            return jsonResponse({ error: "Service unavailable." }, 503, cors);
-          }
-          if (request.headers.get("X-API-Token") !== env.API_TOKEN) {
-            return jsonResponse({ error: "Forbidden" }, 403, cors);
-          }
-        }
         const ip = request.headers.get("cf-connecting-ip") || "unknown";
         if (shouldApplyApiRateLimit(request, env)) {
           const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
@@ -365,17 +337,6 @@ export default {
 
       if (request.method !== "GET") {
         return jsonResponse({ error: "Method not allowed" }, 405, cors);
-      }
-
-      if (shouldRequireApiToken(env, request)) {
-        if (!env.API_TOKEN) {
-          logError(env, "API_TOKEN is not set for non-localhost API traffic");
-          return jsonResponse({ error: "Service unavailable." }, 503, cors);
-        }
-        const token = request.headers.get("X-API-Token");
-        if (token !== env.API_TOKEN) {
-          return jsonResponse({ error: "Forbidden" }, 403, cors);
-        }
       }
 
       if (shouldRequireTurnstileSession(env, request)) {
@@ -419,15 +380,10 @@ export default {
       const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
       const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
       const exposeTurnstile = shouldExposeTurnstileWidget(request, env);
-      if (env.API_TOKEN || (siteKey && exposeTurnstile)) {
+      if (siteKey && exposeTurnstile) {
         const html = await response.text();
         let inject = '<meta charset="UTF-8">';
-        if (env.API_TOKEN) {
-          inject += `<meta name="api-token" content="${escapeHtmlAttr(env.API_TOKEN)}">`;
-        }
-        if (siteKey && exposeTurnstile) {
-          inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
-        }
+        inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
         const injected = html.replace("<meta charset=\"UTF-8\">", inject);
         const newHeaders = new Headers(response.headers);
         newHeaders.delete("content-length");
@@ -665,7 +621,7 @@ function buildCorsHeaders(request) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Token",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Vary": "Origin",
   };
 }

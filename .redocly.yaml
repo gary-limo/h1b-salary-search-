@@ -7,5 +7,5 @@ apis:
 rules:
   no-unresolved-refs: error
   tag-description: off
-  # Allow optional security (documented empty `{}` alongside ApiToken)
+  # No global security scheme (same-origin + optional Turnstile session for search)
   security-defined: off
