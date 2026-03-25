@@ -384,10 +384,7 @@ export default {
       const response = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
       const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
       const exposeTurnstile = shouldExposeTurnstileWidget(request, env);
-      // Turnstile is only for search (/); record detail uses /api/record which is ungated.
-      const injectTurnstileMeta =
-        siteKey && exposeTurnstile && assetUrl.pathname !== "/record.html";
-      if (injectTurnstileMeta) {
+      if (siteKey && exposeTurnstile) {
         const html = await response.text();
         let inject = '<meta charset="UTF-8">';
         inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
