@@ -10,7 +10,7 @@ const POPULAR = [
   { label: "Apple",             employer: "Apple Inc",                job: "",                  loc: "" },
   { label: "Accenture",         employer: "Accenture LLP",            job: "",                  loc: "" },
   { label: "Data Scientist",    employer: "",                         job: "data scientist",    loc: "" },
-  { label: "Software Engineer", employer: "",                         job: "software engineer", loc: "" },
+  { label: "AI Engineer", employer: "",                         job: "ai engineer", loc: "" },
   { label: "San Francisco",     employer: "",                         job: "",                  loc: "san francisco" },
   { label: "Seattle",           employer: "",                         job: "",                  loc: "seattle" },
   { label: "New York",          employer: "",                         job: "",                  loc: "new york" },
