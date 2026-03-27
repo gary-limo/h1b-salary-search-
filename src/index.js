@@ -711,13 +711,7 @@ async function logSQL(env, bucket, data) {
 async function logSearch(env, bucket, data) {
   if (!bucket) return;
   try {
-    const safeData = { ...data };
-    if (!shouldLogSearchTerms(env)) {
-      safeData.employer = safeData.employer ? "[REDACTED]" : null;
-      safeData.job = safeData.job ? "[REDACTED]" : null;
-      safeData.location = safeData.location ? "[REDACTED]" : null;
-    }
-    const body = JSON.stringify(sanitizeLogObject({ ts: new Date().toISOString(), ...safeData }));
+    const body = JSON.stringify(sanitizeLogObject({ ts: new Date().toISOString(), ...data }));
     await bucket.put(r2Key("search"), body, { httpMetadata: { contentType: "application/json" } });
   } catch (e) {
     logError(env, "Search log write failed", e);
