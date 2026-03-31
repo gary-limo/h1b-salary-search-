@@ -410,8 +410,20 @@ function searchCacheVersion(env) {
   return s || "1";
 }
 
-function buildSearchCacheKey(version, employer, job, location, sort, dir, page, pageSize) {
-  return `search:v${version}:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}`;
+function buildSearchCacheKey(version, employer, job, location, sort, dir, page, pageSize, jobMatch) {
+  return `search:v${version}:${employer}:${job}:${location}:${sort}:${dir}:${page}:${pageSize}:${jobMatch}`;
+}
+
+/** Escape `%`, `_`, `\` for SQL LIKE with ESCAPE '\' */
+function escapeSqlLikePattern(s) {
+  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/** `contains` only when employer + job present (substring match on job_title); else `exact`. */
+function resolvedJobMatch(params, employerNorm, jobNorm) {
+  const raw = (params.get("job_match") || params.get("jobMatch") || "exact").trim().toLowerCase();
+  if (raw === "contains" && employerNorm && jobNorm) return "contains";
+  return "exact";
 }
 
 async function handleSearch(params, db, cors, env, ctx) {
@@ -433,10 +445,24 @@ async function handleSearch(params, db, cors, env, ctx) {
   const dir = dirParam === "ASC" ? "ASC" : "DESC";
   const offset = (page - 1) * pageSize;
 
+  const employerNorm = employer.toLowerCase();
+  const jobNorm = job.toLowerCase();
+  const locationNorm = location.toLowerCase();
+  const jobMatch = resolvedJobMatch(params, employerNorm, jobNorm);
+
   const cacheVer = searchCacheVersion(env);
-  const kvKey = buildSearchCacheKey(cacheVer, employer, job, location, sort, dir, page, pageSize);
+  const kvKey = buildSearchCacheKey(cacheVer, employer, job, location, sort, dir, page, pageSize, jobMatch);
   const cacheUrl = new Request(`https://cache.internal/${encodeURIComponent(kvKey)}`);
-  const searchMeta = { employer: employer || null, job: job || null, location: location || null, sort, dir, page, page_size: pageSize };
+  const searchMeta = {
+    employer: employer || null,
+    job: job || null,
+    location: location || null,
+    job_match: jobMatch,
+    sort,
+    dir,
+    page,
+    page_size: pageSize,
+  };
 
   const t0 = Date.now();
   try {
@@ -469,17 +495,19 @@ async function handleSearch(params, db, cors, env, ctx) {
   const where = [];
   const bindings = [];
 
-  const employerNorm = employer.toLowerCase();
-  const jobNorm = job.toLowerCase();
-  const locationNorm = location.toLowerCase();
-
   if (employerNorm) {
     where.push("employer_name = ?");
     bindings.push(employerNorm);
   }
   if (jobNorm) {
-    where.push("job_title = ?");
-    bindings.push(jobNorm);
+    if (jobMatch === "contains") {
+      const likePat = `%${escapeSqlLikePattern(jobNorm)}%`;
+      where.push("job_title LIKE ? ESCAPE '\\'");
+      bindings.push(likePat);
+    } else {
+      where.push("job_title = ?");
+      bindings.push(jobNorm);
+    }
   }
   if (locationNorm) {
     where.push("(worksite_city = ? OR worksite_state = ?)");
@@ -512,6 +540,7 @@ async function handleSearch(params, db, cors, env, ctx) {
           has_employer: !!employerNorm,
           has_job: !!jobNorm,
           has_location: !!locationNorm,
+          job_match: jobMatch,
           sort,
           dir,
           page,

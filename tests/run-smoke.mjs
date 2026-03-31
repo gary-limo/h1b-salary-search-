@@ -102,6 +102,10 @@ const LOCATIONS = [
 const SPECIAL_CASE_EMPLOYER = "E&K Sunrise Inc";
 const SPECIAL_CASE_JOB = "R&D Analyst";
 
+/** Exercises exact employer + `job_match=contains` (typed keyword vs full suggested title). */
+const KLA_CORPORATION_EXAMPLE_EMPLOYER = "KLA Corporation";
+const KLA_CORPORATION_EXAMPLE_JOB_KEYWORD = "mechanical";
+
 function rowMatchesLocation(row, loc) {
   const l = loc.toLowerCase();
   const city = (row.worksite_city || "").toLowerCase();
@@ -130,6 +134,10 @@ function printExpectedActual(kind, params, body) {
   } else if (kind === "location") {
     log(
       `      Every row: worksite_city === ${JSON.stringify(params.location)} OR worksite_state === ${JSON.stringify(params.location)} (case-insensitive)`,
+    );
+  } else if (kind === "employer_job_contains") {
+    log(
+      `      Every row: employer_name === ${JSON.stringify(params.employer)} (case-insensitive); job_title contains ${JSON.stringify(params.job)} (case-insensitive); job_match=contains`,
     );
   }
   log(`    Actual:`);
@@ -175,6 +183,8 @@ async function assertSearch(label, params, kind, assertRow) {
     log(`    Check:    ✓ all ${body.results.length} rows on this page match expected`);
   } else if (body.total === 0 && (kind === "employer" || kind === "job")) {
     log(`    Check:    ⚠ total=0 — unexpected for exact match from /api/suggest`);
+  } else if (body.total === 0 && kind === "employer_job_contains") {
+    log(`    Check:    ⚠ total=0 — unexpected for employer + job substring search`);
   } else if (body.total === 0 && kind === "location") {
     log(`    Check:    (skipped row match — no results for this location term)`);
   }
@@ -315,6 +325,34 @@ async function main() {
   }
 
   log(`\n  ✓ /api/search special cases passed (${SPECIAL_CASE_EMPLOYER}, ${SPECIAL_CASE_JOB})`);
+
+  log(`\n  === /api/search job_match=contains (KLA + mechanical keyword) ===`);
+  const klaMechanicalBody = await assertSearch(
+    `Employer exact + job keyword: ${KLA_CORPORATION_EXAMPLE_EMPLOYER} / ${KLA_CORPORATION_EXAMPLE_JOB_KEYWORD}`,
+    {
+      employer: KLA_CORPORATION_EXAMPLE_EMPLOYER,
+      job: KLA_CORPORATION_EXAMPLE_JOB_KEYWORD,
+      job_match: "contains",
+      pageSize: 5,
+    },
+    "employer_job_contains",
+    (row, p) => {
+      if (row.employer_name.toLowerCase() !== p.employer.toLowerCase()) {
+        throw new Error(`employer mismatch: got ${JSON.stringify(row.employer_name)}`);
+      }
+      const needle = p.job.toLowerCase();
+      if (!(row.job_title || "").toLowerCase().includes(needle)) {
+        throw new Error(`job_title missing substring ${JSON.stringify(needle)}: got ${JSON.stringify(row.job_title)}`);
+      }
+    },
+  );
+  if (klaMechanicalBody.total === 0) {
+    throw new Error(
+      `KLA + mechanical (job_match=contains) returned no rows — expected ≥1 (load data with KLA mechanical titles or check spelling).`,
+    );
+  }
+
+  log(`\n  ✓ /api/search job_match=contains example passed (${KLA_CORPORATION_EXAMPLE_EMPLOYER} / ${KLA_CORPORATION_EXAMPLE_JOB_KEYWORD})`);
 
   console.log("\nAll smoke checks passed.");
 }

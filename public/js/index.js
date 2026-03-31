@@ -150,10 +150,12 @@ function applyResultFilters(records) {
 }
 
 async function fetchPage(emp, job, loc) {
+  const empT = emp.trim(), jobT = job.trim(), locT = loc.trim();
   const params = new URLSearchParams({
-    employer: emp.trim(), job: job.trim(), location: loc.trim(),
+    employer: empT, job: jobT, location: locT,
     page: currentPage, pageSize: currentPageSize, sort: sortCol, dir: sortDir,
   });
+  if (empT && jobT && !selJob) params.set("job_match", "contains");
   const res = await fetch(`/api/search?${params}`, {
     credentials: "include",
   });

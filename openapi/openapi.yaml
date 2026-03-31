@@ -37,7 +37,9 @@ paths:
         At least one of `employer`, `job`, or `location` must be non-empty after trim.
         Strings are truncated server-side to **200** characters. Employer/job/location
         matching uses normalized lowercase equality (location matches `worksite_city` or
-        `worksite_state`). Pagination: `page` 1–10000, `pageSize` 1–100 (default 100).
+        `worksite_state`).         With `job_match=contains` (and non-empty `employer` and `job`),
+        `job_title` matches with `LIKE '%pattern%'` after lowercasing the query (wildcards in the
+        query are escaped). Otherwise `job_title` uses exact normalized equality. Pagination: `page` 1–10000, `pageSize` 1–100 (default 100).
         Unknown `sort` falls back to `wage_rate_of_pay_from`; `dir` is **ASC** or **DESC**
         (default **DESC**).
       parameters:
@@ -48,6 +50,7 @@ paths:
         - $ref: "#/components/parameters/PageSizeQuery"
         - $ref: "#/components/parameters/SortQuery"
         - $ref: "#/components/parameters/DirQuery"
+        - $ref: "#/components/parameters/JobMatchQuery"
       responses:
         "200":
           description: Search results
@@ -232,6 +235,17 @@ components:
         type: string
         enum: [ASC, DESC]
         default: DESC
+    JobMatchQuery:
+      name: job_match
+      in: query
+      description: |
+        Job title match mode. `exact` (default) uses equality on the normalized (lowercased) string.
+        `contains` is honored only when both `employer` and `job` are non-empty after trim; otherwise
+        the server treats the mode as `exact`. Alias query name `jobMatch` is also accepted.
+      schema:
+        type: string
+        enum: [exact, contains]
+        default: exact
     SuggestContextEmployer:
       name: employer
       in: query
