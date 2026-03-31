@@ -1,5 +1,7 @@
 # H1B Salary Search
 
+For a full architectural breakdown (caching layers, ETL, data pipeline, and infrastructure choices), see: [I built an open-source H-1B salary search website using AI: here’s how](https://www.linkedin.com/pulse/i-built-open-source-h-1b-salary-search-website-using-ai-gaurav-muley-aivae).
+
 Free, open-source search engine for H-1B visa salary data from the U.S. Department of Labor LCA disclosure records (FY2025). 570,000+ records.
 
 **Live:** [h1b-salaries.com](https://h1b-salaries.com)
