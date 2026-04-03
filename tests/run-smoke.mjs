@@ -201,7 +201,9 @@ async function main() {
   await assertAsset("/", "asset");
   await assertAsset("/index.html", "asset");
   await assertAsset("/favicon.svg", "asset");
-  log(`\n  ✓ Assets OK (3 requests above)`);
+  await assertAsset("/insights/", "insights");
+  await assertAsset("/insights/list-of-h1b-concurrent-employers-2026/", "insights");
+  log(`\n  ✓ Assets OK (5 requests above)`);
 
   log(`\n  Building suggest pools (parallel employer + job)…`);
   const [employerPool, jobPool] = await Promise.all([

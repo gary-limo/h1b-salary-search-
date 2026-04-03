@@ -4,11 +4,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .skip-link{position:absolute;top:-100%;left:16px;background:#1B2A4A;color:#fff;padding:8px 16px;border-radius:0 0 8px 8px;font-size:13px;font-weight:600;z-index:999;text-decoration:none;transition:top .15s}
 .skip-link:focus{top:0}
 :focus-visible{outline:2px solid #B8A062;outline-offset:2px}
-nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px}
+nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(196,163,90,.2);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .nav-dot{width:8px;height:8px;border-radius:50%;background:#C4A35A;box-shadow:0 0 6px #C4A35A}
 .nav-title{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.3px}
 .nav-accent{color:#C4A35A}
-.nav-back{margin-left:auto;color:#C4A35A;text-decoration:none;font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:14px;flex-shrink:0}
+.nav-insights{color:#B8A062;text-decoration:none;font-size:13px;font-weight:500}
+.nav-insights:hover{color:#fff;text-decoration:underline}
+.nav-back{color:#C4A35A;text-decoration:none;font-size:13px;font-weight:500;display:flex;align-items:center;gap:5px}
 .nav-back:hover{color:#fff}
 
 main{max-width:860px;margin:0 auto;padding:32px 24px 60px}

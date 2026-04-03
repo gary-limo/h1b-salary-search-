@@ -288,6 +288,15 @@ async function hasValidTurnstileSession(request, env) {
   return verifyTurnstileSessionCookie(raw, env.TURNSTILE_SECRET_KEY);
 }
 
+/** Pretty URLs for static insights articles: /insights/ and /insights/<slug>/ → public/insights/.../index.html */
+function insightsHtmlPath(pathname) {
+  const p = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  if (p === "/insights") return "/insights/index.html";
+  const m = p.match(/^\/insights\/([a-zA-Z0-9][a-zA-Z0-9-]*)$/);
+  if (m) return `/insights/${m[1]}/index.html`;
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -376,6 +385,16 @@ export default {
       }
 
       return jsonResponse({ error: "Not found" }, 404, cors);
+    }
+
+    const insightsPath = insightsHtmlPath(url.pathname);
+    if (insightsPath && env.ASSETS) {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = insightsPath;
+      const insightsRes = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+      if (insightsRes.ok || insightsRes.status === 304) {
+        return insightsRes;
+      }
     }
 
     if (staticRouteMap[url.pathname]) {
