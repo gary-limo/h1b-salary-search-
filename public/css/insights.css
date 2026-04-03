@@ -63,7 +63,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .section-label-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .section-dot{width:8px;height:8px;border-radius:50%;background:#B8A062;flex-shrink:0}
 .section-label-bar h2{font-size:17px;font-weight:800;color:#1B2A4A;letter-spacing:-.3px;margin:0}
-.section-intro{font-size:14px;color:#5A6478;line-height:1.5;margin-bottom:14px;max-width:72ch}
+.section-intro{font-size:14px;color:#5A6478;line-height:1.5;margin-bottom:14px;max-width:760px}
 .section-intro strong{color:#1B2A4A}
 .section-intro--after-tldr{margin-top:10px;margin-bottom:0}
 
@@ -73,7 +73,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filt
 .definition-card p:last-child{margin-bottom:0}
 .definition-card strong{color:#1B2A4A}
 .definition-note{font-size:13px;color:#8896A6;font-style:italic}
-.tldr{font-size:14px;color:#5A6478;line-height:1.5;padding-left:18px;border-left:3px solid #B8A062;max-width:72ch}
+.tldr{font-size:14px;color:#5A6478;line-height:1.5;padding-left:18px;border-left:3px solid #B8A062;max-width:760px}
 
 .post-disclaimer{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(184,160,98,.06);border:1px solid rgba(184,160,98,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#5A6478;line-height:1.5;text-align:center;margin-top:12px}
 .post-disclaimer a{color:#B8A062;font-weight:600;text-decoration:underline;text-underline-offset:2px}
