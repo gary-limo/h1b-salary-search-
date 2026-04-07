@@ -6,3 +6,10 @@
 
 # Optional: load Turnstile on localhost (default: off to avoid http/https console errors).
 # TURNSTILE_SHOW_ON_LOCALHOST=true
+
+# Secret for Turnstile server-side verify (same as production secret put).
+# TURNSTILE_SECRET_KEY=
+
+# Optional: if `wrangler dev` uses a public tunnel hostname, contact form KV limits apply.
+# Set to skip the per-day / per-hour caps while testing.
+# SKIP_CONTACT_RATE_LIMIT=true

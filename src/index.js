@@ -17,6 +17,15 @@ const BLOCKED_PREFIXES = ["/src/", "/scripts/", "/migrations/"];
 const BLOCKED_PATHS = new Set(["/suggestions_index.json"]);
 
 const SUGGESTIONS_INDEX_KEY = "suggestions_index.json";
+
+/** Contact form → R2 `inbox/{uuid}.json` */
+const CONTACT_MESSAGE_MAX = 8000;
+/** Site note POST path (intentionally not named "contact" to reduce drive-by bot posts). */
+const SITE_NOTE_POST_PATH = "/api/x/st";
+const CONTACT_JSON_MAX_BYTES = 65536;
+const CONTACT_DAILY_GLOBAL_MAX = 100;
+const CONTACT_MAX_PER_IP_PER_DAY = 2;
+const CONTACT_KV_DAY_TTL_SEC = 172800;
 const TURNSTILE_SESSION_COOKIE = "h1b_ts_sess";
 const TURNSTILE_SESSION_MAX_AGE_SEC = 2 * 60 * 60;
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -288,6 +297,148 @@ async function hasValidTurnstileSession(request, env) {
   return verifyTurnstileSessionCookie(raw, env.TURNSTILE_SECRET_KEY);
 }
 
+function utcContactDateKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function shouldApplyContactRateLimits(request, env) {
+  if (!env.SEARCH_CACHE) return false;
+  if (env.SKIP_CONTACT_RATE_LIMIT === "true") return false;
+  try {
+    const { hostname } = new URL(request.url);
+    if (isLocalDevHostname(hostname)) return false;
+  } catch {
+    /* fall through */
+  }
+  return true;
+}
+
+/**
+ * POST SITE_NOTE_POST_PATH — Turnstile + honeypot + KV limits + R2 inbox/{uuid}.json
+ */
+async function handleContactPost(request, env, cors) {
+  if (!env.INBOX) {
+    return jsonResponse({ error: "This action is not available." }, 503, cors);
+  }
+
+  const rawText = await request.text();
+  if (rawText.length > CONTACT_JSON_MAX_BYTES) {
+    return jsonResponse({ error: "Request too large." }, 413, cors);
+  }
+
+  let body;
+  try {
+    body = JSON.parse(rawText);
+  } catch {
+    return jsonResponse({ error: "Invalid JSON." }, 400, cors);
+  }
+
+  const honeypot = String(body?._company_website ?? body?.company_website ?? "").trim();
+  if (honeypot.length > 0) {
+    return jsonResponse({ ok: true }, 200, cors);
+  }
+
+  const message = String(body?.message ?? "").trim().slice(0, CONTACT_MESSAGE_MAX);
+  const token = typeof body?.turnstileToken === "string" ? body.turnstileToken.trim() : "";
+
+  if (!message) {
+    return jsonResponse({ error: "Message is required." }, 400, cors);
+  }
+  if (message.length < 10) {
+    return jsonResponse({ error: "Message is too short." }, 400, cors);
+  }
+
+  const skipTs =
+    env.SKIP_TURNSTILE === "true" ||
+    (() => {
+      try {
+        return isLocalDevHostname(new URL(request.url).hostname);
+      } catch {
+        return false;
+      }
+    })();
+
+  if (!skipTs) {
+    if (!isTurnstileConfigured(env)) {
+      return jsonResponse({ error: "This action is not available." }, 503, cors);
+    }
+    if (!token || token.length > 2048) {
+      return jsonResponse({ error: "Complete the verification challenge." }, 400, cors);
+    }
+    const remoteip = request.headers.get("cf-connecting-ip") || "";
+    const ts = await verifyTurnstileSiteverify(token, remoteip, env.TURNSTILE_SECRET_KEY);
+    if (!ts.success) {
+      logError(env, "Contact Turnstile failed", (ts["error-codes"] || []).join(","));
+      return jsonResponse({ error: "Verification failed. Please try again." }, 400, cors);
+    }
+  }
+
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+
+  if (shouldApplyApiRateLimit(request, env) && env.API_RATE_LIMITER) {
+    // `sn:` prefix = own 20/min bucket; does not share search/turnstile limiter key (`ip` alone).
+    const { success } = await env.API_RATE_LIMITER.limit({ key: `sn:${ip}` });
+    if (!success) {
+      return jsonResponse(
+        { error: "Too many requests. Please try again later." },
+        429,
+        { ...cors, "Retry-After": "60" }
+      );
+    }
+  }
+
+  const applyKv = shouldApplyContactRateLimits(request, env);
+  const dateStr = utcContactDateKey();
+  const dayKey = `inbox:day:${dateStr}`;
+  const ipDayKey = `inbox:ipday:${ip}:${dateStr}`;
+
+  if (applyKv) {
+    const dayCount = parseInt((await env.SEARCH_CACHE.get(dayKey)) || "0", 10);
+    if (dayCount >= CONTACT_DAILY_GLOBAL_MAX) {
+      return jsonResponse(
+        { error: "Daily message limit reached. Please try again tomorrow." },
+        429,
+        { ...cors, "Retry-After": "86400" }
+      );
+    }
+    const ipDayCount = parseInt((await env.SEARCH_CACHE.get(ipDayKey)) || "0", 10);
+    if (ipDayCount >= CONTACT_MAX_PER_IP_PER_DAY) {
+      return jsonResponse(
+        { error: "You can only send 2 messages per day from this network. Try again tomorrow." },
+        429,
+        { ...cors, "Retry-After": "86400" }
+      );
+    }
+  }
+
+  const id = crypto.randomUUID();
+  const key = `inbox/${id}.json`;
+  const payload = {
+    id,
+    createdAt: new Date().toISOString(),
+    message,
+    ip: request.headers.get("cf-connecting-ip") || "",
+  };
+
+  try {
+    await env.INBOX.put(key, JSON.stringify(payload), {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+    });
+  } catch (e) {
+    logError(env, "INBOX put failed", e);
+    return jsonResponse({ error: "Could not save your message. Please try again later." }, 500, cors);
+  }
+
+  if (applyKv) {
+    const dayCount = parseInt((await env.SEARCH_CACHE.get(dayKey)) || "0", 10);
+    const ipDayCount = parseInt((await env.SEARCH_CACHE.get(ipDayKey)) || "0", 10);
+    await env.SEARCH_CACHE.put(dayKey, String(dayCount + 1), { expirationTtl: CONTACT_KV_DAY_TTL_SEC });
+    await env.SEARCH_CACHE.put(ipDayKey, String(ipDayCount + 1), { expirationTtl: CONTACT_KV_DAY_TTL_SEC });
+  }
+
+  return jsonResponse({ ok: true }, 200, cors);
+}
+
 /** Pretty URLs for static insights articles: /insights/ and /insights/<slug>/ → public/insights/.../index.html */
 function insightsHtmlPath(pathname) {
   const p = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
@@ -303,6 +454,7 @@ export default {
     const staticRouteMap = {
       "/": "/index.html",
       "/record": "/record.html",
+      "/reach-out": "/contact.html",
     };
 
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p)) || BLOCKED_PATHS.has(url.pathname)) {
@@ -332,6 +484,7 @@ export default {
       if (url.pathname === "/api/turnstile/session" && request.method === "POST") {
         const ip = request.headers.get("cf-connecting-ip") || "unknown";
         if (shouldApplyApiRateLimit(request, env)) {
+          // Same key as /api/search below — shared 20/min bucket for turnstile + search only (not contact).
           const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
           if (!success) {
             return jsonResponse(
@@ -342,6 +495,10 @@ export default {
           }
         }
         return handleTurnstileSession(request, env, cors);
+      }
+
+      if (url.pathname === SITE_NOTE_POST_PATH && request.method === "POST") {
+        return handleContactPost(request, env, cors);
       }
 
       if (request.method !== "GET") {
@@ -364,6 +521,7 @@ export default {
         url.pathname === "/api/search" &&
         shouldApplyApiRateLimit(request, env)
       ) {
+        // Key is raw IP — separate counter from site-note POST (which uses `sn:${ip}`).
         const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
         if (!success) {
           return jsonResponse(

@@ -203,6 +203,7 @@ async function main() {
   await assertAsset("/favicon.svg", "asset");
   await assertAsset("/insights/", "insights");
   await assertAsset("/insights/list-of-h1b-concurrent-employers-2026/", "insights");
+  await assertAsset("/reach-out", "reach-out");
   log(`\n  ✓ Assets OK (5 requests above)`);
 
   log(`\n  Building suggest pools (parallel employer + job)…`);

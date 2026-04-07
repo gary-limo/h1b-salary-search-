@@ -72,6 +72,16 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 
 If either value is missing, Turnstile stays **off** and behavior matches a normal deploy. With both set, browsers must complete the widget once; the Worker sets an **HttpOnly** session cookie (about **2 hours**) so legitimate users are not challenged on every search. **Localhost** and **`SKIP_TURNSTILE=true`** (e.g. in `.dev.vars`) skip the check for development and smoke tests.
 
+### Site note form (`/reach-out`)
+
+Messages are stored in **R2** as `inbox/{uuid}.json` (binding **`INBOX`**, bucket name **`inbox`**). Create the bucket once:
+
+```bash
+npx wrangler r2 bucket create inbox
+```
+
+The browser POSTs to **`/api/x/st`** (not advertised as a “contact” URL in the Worker). The Worker enforces **Turnstile** on the POST body (skipped on **localhost** for the API, same as search), a **honeypot** field, the shared **API rate limiter** (burst control), and **KV** caps: **100 submissions per UTC day** (global) and **2 per IP per UTC day**. Set **`TURNSTILE_SHOW_ON_LOCALHOST=true`** and **`TURNSTILE_SECRET_KEY`** in `.dev.vars` if you want the widget while testing on `http://127.0.0.1`. For tunnel hostnames, optional **`SKIP_CONTACT_RATE_LIMIT=true`** avoids KV caps during testing.
+
 ## Data Source
 
 U.S. Department of Labor — H-1B Labor Condition Application (LCA) disclosure data. Wages shown do not include benefits or bonuses.

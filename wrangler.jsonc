@@ -36,6 +36,10 @@
 			"bucket_name": "h1b-suggestions-index"
 		},
 		{
+			"binding": "INBOX",
+			"bucket_name": "inbox"
+		},
+		{
 			"bucket_name": "h1b-suggestions-index",
 			"binding": "Y"
 		}

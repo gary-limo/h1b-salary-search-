@@ -1,0 +1,19 @@
+/* Contact page — extends index.css tokens */
+.contact-main{max-width:560px;margin:0 auto;padding:32px 24px 48px;width:100%}
+.contact-lede{font-size:15px;line-height:1.55;color:#5A6478;margin-bottom:24px}
+.contact-form{background:#fff;border:1px solid #E2DDD6;border-radius:14px;padding:22px 24px;box-shadow:0 2px 10px rgba(27,42,74,.05)}
+.contact-field{margin-bottom:16px}
+.contact-field label{display:block;font-size:12px;font-weight:700;color:#1B2A4A;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+.contact-field input,.contact-field textarea{width:100%;padding:10px 12px;border:1px solid #E2DDD6;border-radius:10px;font-size:14px;font-family:inherit;color:#1B2A4A;background:#fff;transition:border .15s}
+.contact-field input:focus,.contact-field textarea:focus{outline:none;border-color:#B8A062;box-shadow:0 0 0 3px rgba(184,160,98,.15)}
+.contact-field textarea{min-height:140px;resize:vertical;line-height:1.5}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.contact-turnstile{margin:12px 0;display:flex;justify-content:center;min-height:1px}
+.contact-submit{width:100%;height:44px;background:#C41E3A;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;transition:background .15s;margin-top:4px}
+.contact-submit:hover:not(:disabled){background:#A01830}
+.contact-submit:disabled{background:#9B1629;cursor:not-allowed;opacity:.9}
+.contact-status{margin-top:14px;font-size:14px;line-height:1.45;min-height:1.25em}
+.contact-status.ok{color:#1B4332}
+.contact-status.err{color:#9B1C1C}
+.contact-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#B8A062;text-decoration:none;margin-bottom:20px}
+.contact-back:hover{color:#F0E6C8}
