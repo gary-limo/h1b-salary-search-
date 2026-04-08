@@ -1,5 +1,23 @@
 import { trySeoDiscovery } from "./seo-discovery.js";
 
+/** Main search UI assets — never cache so deploys apply without manual ?v= bumps. */
+const NO_STORE_ASSET_PATHS = new Set(["/js/index.js", "/css/index.css"]);
+
+async function serveAssetNoStore(request, env) {
+  if (!env.ASSETS || request.method !== "GET") return null;
+  const { pathname } = new URL(request.url);
+  if (!NO_STORE_ASSET_PATHS.has(pathname)) return null;
+  const assetUrl = new URL(request.url);
+  assetUrl.search = "";
+  assetUrl.hash = "";
+  const res = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+  if (!res.ok && res.status !== 304) return res;
+  const h = new Headers(res.headers);
+  h.set("Cache-Control", "no-store");
+  h.delete("content-length");
+  return new Response(res.body, { status: res.status, headers: h });
+}
+
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_FETCH_SIZE    = 100;
 const MAX_INPUT_LENGTH = 200;
@@ -538,6 +556,8 @@ async function serveH1bEmployerPage(request, env, slug) {
   const headers = new Headers(assetRes.headers);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.delete("content-length");
+  // Personalized HTML; avoid long browser/CDN caches that pair old HTML with stale script URLs.
+  headers.set("Cache-Control", "private, max-age=0, must-revalidate");
   return new Response(html, { status: 200, headers });
 }
 
@@ -685,6 +705,9 @@ export default {
       }
       return response;
     }
+
+    const noStoreAsset = await serveAssetNoStore(request, env);
+    if (noStoreAsset) return noStoreAsset;
 
     return env.ASSETS.fetch(request);
   },
