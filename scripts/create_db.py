@@ -21,6 +21,10 @@ import sys
 import uuid
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from wage_parse import parse_wage_float
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 CSV_PATH = os.path.join(PROJECT_DIR, "parsed_output.csv")
 EXPORT_SQL_PATH = os.path.join(PROJECT_DIR, "h1b_wages_export.sql")
@@ -67,12 +71,10 @@ def sql_escape(value):
 def format_value(csv_col, raw_value):
     """Format a CSV value for SQL insertion."""
     if csv_col in FLOAT_COLUMNS:
-        if not raw_value or not raw_value.strip():
+        n = parse_wage_float(raw_value)
+        if n is None:
             return "NULL"
-        try:
-            return str(float(raw_value.replace(",", "")))
-        except ValueError:
-            return "NULL"
+        return str(n)
     return sql_escape(raw_value)
 
 

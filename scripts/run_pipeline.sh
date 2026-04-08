@@ -102,6 +102,16 @@ info "parsed_output.csv: $ROW_COUNT lines, $CSV_SIZE"
 info "Step 1 completed in ${STEP1_TIME}s"
 
 # ─────────────────────────────────────────────────────────────
+# Step 1b: Wage field data quality (must pass before D1 build)
+# ─────────────────────────────────────────────────────────────
+step_header "Step 1b: Data quality — wage fields"
+progress "Running scripts/validate_parsed_wages.py..."
+if ! python3 scripts/validate_parsed_wages.py; then
+  fail "Wage validation failed. Fix parsed_output.csv / data_parsing.py before continuing."
+fi
+info "Wage validation passed"
+
+# ─────────────────────────────────────────────────────────────
 # Step 2: Build local D1 from parsed_output.csv
 # ─────────────────────────────────────────────────────────────
 step_header "Step 2: Building local D1 database"
@@ -184,7 +194,20 @@ if [[ "$DEPLOY_PROD" == true ]]; then
   else
     warn "public/suggestions_index.json missing; skipping production R2 upload"
   fi
-  info "Production deploy steps completed"
+
+  step_header "Step 7: Bump search cache version (KV + edge invalidation)"
+  progress "Incrementing SEARCH_CACHE_VERSION in wrangler.jsonc..."
+  if python3 scripts/bump_search_cache_version.py; then
+    info "Search cache keys will use the new version after Worker deploy."
+  else
+    warn "Could not bump SEARCH_CACHE_VERSION — bump wrangler.jsonc manually before deploy."
+  fi
+  echo ""
+  echo -e "  ${YELLOW}Deploy Worker to apply:${RESET} ${BOLD}npx wrangler deploy${RESET}"
+  echo -e "  (Updates SEARCH_CACHE_VERSION for /api/search; new isolates reload suggestions from R2.)"
+  echo ""
+
+  info "Production data steps completed (D1 + R2 + cache version bump)"
 else
   echo ""
   echo -e "  ${YELLOW}Production deploy skipped${RESET}"
@@ -203,12 +226,14 @@ SECS=$(( TOTAL_TIME % 60 ))
 step_header "Pipeline complete"
 
 echo -e "  ${GREEN}Step 1${RESET}  Parse Excel → CSV                 ${STEP1_TIME}s"
+echo -e "  ${GREEN}Step 1b${RESET} Wage field validation (parsed CSV)"
 echo -e "  ${GREEN}Step 2${RESET}  Build local D1 + distinct pairs    ${STEP2_TIME}s"
 echo -e "  ${GREEN}Step 3${RESET}  Build suggestions index (JSON)     ${STEP3_TIME}s"
 echo -e "  ${GREEN}Step 4${RESET}  Upload suggestions index → local R2"
 if [[ "$DEPLOY_PROD" == true ]]; then
 echo -e "  ${GREEN}Step 5${RESET}  Deploy D1 to production            ${STEP5_TIME}s"
 echo -e "  ${GREEN}Step 6${RESET}  Upload suggestions index → prod R2"
+echo -e "  ${GREEN}Step 7${RESET}  Bump SEARCH_CACHE_VERSION + deploy reminder"
 fi
 echo ""
 echo -e "  Total: ${BOLD}${MINUTES}m ${SECS}s${RESET}"

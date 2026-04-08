@@ -542,10 +542,26 @@ def clean_job_title_field(value):
     return text
 
 
+def strip_numeric_cell(value):
+    """Trim only — do not run clean_field on wages (it turns '.' into space and breaks floats)."""
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
 # Apply clean_field to every output field except these (preserve exact chars: case, symbols, etc.)
 COLUMNS_NO_CLEAN = frozenset(['CASE_NUMBER', 'SOC_CODE', 'BEGIN_DATE', 'END_DATE'])
+# Wage / prevailing columns must not use clean_field: punctuation like '.' and ',' is meaningful.
+NUMERIC_CSV_COLUMNS = frozenset({
+    "WAGE_RATE_OF_PAY_FROM",
+    "WAGE_RATE_OF_PAY_TO",
+    "PREVAILING_WAGE",
+})
 for col in output_data.columns:
     if col in COLUMNS_NO_CLEAN:
+        continue
+    if col in NUMERIC_CSV_COLUMNS:
+        output_data[col] = output_data[col].apply(strip_numeric_cell)
         continue
     if col == "JOB_TITLE":
         output_data[col] = output_data[col].apply(clean_job_title_field)
