@@ -1,3 +1,5 @@
+import { trySeoDiscovery } from "./seo-discovery.js";
+
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_FETCH_SIZE    = 100;
 const MAX_INPUT_LENGTH = 200;
@@ -559,6 +561,11 @@ export default {
 
     if (BLOCKED_PREFIXES.some((p) => url.pathname.startsWith(p)) || BLOCKED_PATHS.has(url.pathname)) {
       return new Response("Not Found", { status: 404 });
+    }
+
+    const discoveryRes = await trySeoDiscovery(request, env);
+    if (discoveryRes) {
+      return discoveryRes;
     }
 
     if (url.pathname.startsWith("/api/")) {

@@ -1,0 +1,43 @@
+/* Browse employers hub + letter pages (Worker-served HTML) */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#FAFAF8;color:#1B2A4A;-webkit-font-smoothing:antialiased;line-height:1.5}
+a{color:#1B2A4A}
+.skip-link{position:absolute;top:-100%;left:16px;background:#1B2A4A;color:#fff;padding:8px 16px;border-radius:0 0 8px 8px;font-size:13px;font-weight:600;z-index:999;text-decoration:none}
+.skip-link:focus{top:0}
+nav.browse-nav{position:sticky;top:0;z-index:50;background:rgba(27,42,74,.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(184,160,98,.2);padding:0 24px;height:52px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.browse-nav .nav-dot{width:8px;height:8px;border-radius:50%;background:#B8A062;margin-right:0}
+.browse-nav .nav-brand{color:#fff;font-weight:700;font-size:15px;text-decoration:none;letter-spacing:-.3px}
+.browse-nav .nav-accent{color:#B8A062}
+.browse-nav .nav-links{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.browse-nav .nav-link{color:#B8A062;text-decoration:none;font-weight:500;font-size:13px}
+.browse-nav .nav-link:hover{color:#fff;text-decoration:underline}
+.browse-nav .nav-sep{color:rgba(255,255,255,.2);font-size:12px}
+main.browse-main{max-width:920px;margin:0 auto;padding:28px 24px 48px}
+.browse-breadcrumb{font-size:13px;color:#5A6478;margin-bottom:16px}
+.browse-breadcrumb a{color:#1B2A4A;text-decoration:none}
+.browse-breadcrumb a:hover{text-decoration:underline}
+.browse-breadcrumb span[aria-current="page"]{color:#5A6478}
+.browse-main h1{font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.5px;margin-bottom:10px}
+.browse-main .lede{color:#5A6478;font-size:15px;margin-bottom:24px;max-width:640px}
+.browse-sitemap-note{font-size:13px;color:#5A6478;margin-bottom:20px;padding:12px 14px;background:rgba(27,42,74,.04);border-radius:10px;border:1px solid #E2DDD6}
+.browse-sitemap-note a{color:#1B2A4A;font-weight:600}
+.browse-letter-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:32px}
+.browse-letter-grid a{display:inline-flex;align-items:center;justify-content:center;min-width:40px;padding:8px 12px;border-radius:8px;border:1px solid #E2DDD6;background:#fff;text-decoration:none;font-weight:600;font-size:13px;transition:background .12s,border-color .12s}
+.browse-letter-grid a:hover{background:rgba(184,160,98,.12);border-color:#B8A062}
+.browse-letter-grid a.browse-empty{opacity:.45;pointer-events:none;cursor:default}
+.browse-count{font-size:13px;color:#5A6478;margin-bottom:14px}
+.browse-link-list{list-style:none;display:grid;gap:0;border:1px solid #E2DDD6;border-radius:12px;background:#fff;overflow:hidden}
+.browse-link-list li{border-bottom:1px solid #F0ECE8}
+.browse-link-list li:last-child{border-bottom:none}
+.browse-link-list a{display:block;padding:10px 14px;text-decoration:none;font-size:14px;color:#1B2A4A;transition:background .1s}
+.browse-link-list a:hover{background:rgba(184,160,98,.08)}
+.browse-pager{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:24px;padding-top:20px;border-top:1px solid #E2DDD6}
+.browse-pager span{font-size:13px;color:#5A6478;margin-right:8px}
+.browse-pager a,.browse-pager em{display:inline-flex;align-items:center;min-width:36px;justify-content:center;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none}
+.browse-pager a{border:1px solid #E2DDD6;background:#fff;color:#1B2A4A}
+.browse-pager a:hover{border-color:#B8A062;background:rgba(184,160,98,.1)}
+.browse-pager em{background:#1B2A4A;color:#fff;border:1px solid #1B2A4A;font-style:normal}
+.site-footer.browse-footer{margin-top:24px;padding:20px 24px;border-top:1px solid #E2DDD6;text-align:center;font-size:13px;color:#5A6478}
+.site-footer.browse-footer a{color:#1B2A4A;text-decoration:none}
+.site-footer.browse-footer a:hover{text-decoration:underline}
+.footer-sep{margin:0 8px;color:#ccc}

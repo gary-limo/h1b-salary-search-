@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+Write sitemap XML files under local-sitemaps/ for offline review.
+
+Mirrors Worker logic in src/seo-discovery.js (same chunk size + static paths).
+
+  SITEMAP_BASE=https://h1b-salaries.com python3 scripts/generate_local_sitemap_files.py
+
+Default base URL: https://h1b-salaries.com (override with SITEMAP_BASE).
+Requires local Wrangler D1 SQLite with employer_seo populated.
+"""
+
+from __future__ import annotations
+
+import glob
+import os
+import sqlite3
+import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
+OUT_DIR = os.path.join(PROJECT_DIR, "local-sitemaps")
+
+WRANGLER_D1_DIR = os.path.join(
+    PROJECT_DIR, ".wrangler", "state", "v3", "d1", "miniflare-D1DatabaseObject"
+)
+
+# Keep in sync with src/seo-discovery.js (SITEMAP_MAX_URLS + STATIC_SITEMAP_PATHS)
+SITEMAP_MAX_URLS = 45000
+STATIC_SITEMAP_PATHS = [
+    "/",
+    "/employers/",
+    "/insights/",
+    "/insights/list-of-h1b-concurrent-employers-2026/",
+    "/reach-out",
+]
+
+
+def find_local_d1_db():
+    pattern = os.path.join(WRANGLER_D1_DIR, "*.sqlite")
+    matches = glob.glob(pattern)
+    return matches[0] if matches else None
+
+
+def escape_xml(s: str) -> str:
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def write_sitemap_static(base: str, out_dir: str) -> None:
+    path = os.path.join(out_dir, "sitemap-static.xml")
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for p in STATIC_SITEMAP_PATHS:
+        loc = p if p.startswith("http") else f"{base.rstrip('/')}{p}"
+        pri = "1.0" if p == "/" else "0.85"
+        lines.append(
+            f"  <url><loc>{escape_xml(loc)}</loc>"
+            f"<changefreq>weekly</changefreq><priority>{pri}</priority></url>"
+        )
+    lines.append("</urlset>")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Wrote {path} ({len(STATIC_SITEMAP_PATHS)} URLs)")
+
+
+def write_sitemap_employers_chunks(base: str, conn: sqlite3.Connection, out_dir: str) -> int:
+    cur = conn.execute("SELECT COUNT(*) FROM employer_seo")
+    total = int(cur.fetchone()[0])
+    if total == 0:
+        print("employer_seo is empty — no sitemap-employers-*.xml files.")
+        return 0
+    pages = (total + SITEMAP_MAX_URLS - 1) // SITEMAP_MAX_URLS
+    base_norm = base.rstrip("/")
+    for page in range(1, pages + 1):
+        offset = (page - 1) * SITEMAP_MAX_URLS
+        rows = conn.execute(
+            "SELECT slug FROM employer_seo ORDER BY slug LIMIT ? OFFSET ?",
+            (SITEMAP_MAX_URLS, offset),
+        ).fetchall()
+        path = os.path.join(out_dir, f"sitemap-employers-{page}.xml")
+        lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        for (slug,) in rows:
+            if not slug:
+                continue
+            loc = f"{base_norm}/h1b-employer/{slug}"
+            lines.append(
+                f"  <url><loc>{escape_xml(loc)}</loc>"
+                f"<changefreq>monthly</changefreq><priority>0.65</priority></url>"
+            )
+        lines.append("</urlset>")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        print(f"Wrote {path} ({len(rows)} URLs)")
+    return pages
+
+
+def write_sitemap_index(base: str, out_dir: str, employer_pages: int) -> None:
+    path = os.path.join(out_dir, "sitemap.xml")
+    base_norm = base.rstrip("/")
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    lines.append(
+        f"  <sitemap><loc>{escape_xml(base_norm + '/sitemap-static.xml')}</loc></sitemap>"
+    )
+    for i in range(1, employer_pages + 1):
+        loc = f"{base_norm}/sitemap-employers-{i}.xml"
+        lines.append(f"  <sitemap><loc>{escape_xml(loc)}</loc></sitemap>")
+    lines.append("</sitemapindex>")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Wrote {path} (index with {1 + employer_pages} child sitemaps)")
+
+
+def main() -> int:
+    base = (os.environ.get("SITEMAP_BASE") or "https://h1b-salaries.com").strip()
+    if not base.startswith("http"):
+        print("SITEMAP_BASE must be an absolute URL (e.g. https://h1b-salaries.com)", file=sys.stderr)
+        return 1
+
+    db_path = find_local_d1_db()
+    if not db_path:
+        print(
+            "No local D1 SQLite under .wrangler/state/... Run npm run dev once and build employer_seo.",
+            file=sys.stderr,
+        )
+        return 1
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    readme = os.path.join(OUT_DIR, "README.txt")
+    with open(readme, "w", encoding="utf-8") as f:
+        f.write(
+            "Generated by scripts/generate_local_sitemap_files.py for review only.\n"
+            "Production serves the same URLs dynamically from the Worker.\n"
+            f"Base URL used: {base}\n"
+        )
+
+    write_sitemap_static(base, OUT_DIR)
+
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='employer_seo'"
+        )
+        if not cur.fetchone():
+            print("employer_seo table missing.", file=sys.stderr)
+            return 1
+        n = write_sitemap_employers_chunks(base, conn, OUT_DIR)
+    finally:
+        conn.close()
+
+    write_sitemap_index(base, OUT_DIR, n)
+    print(f"\nDone. Open files under: {OUT_DIR}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

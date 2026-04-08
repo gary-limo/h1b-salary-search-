@@ -361,6 +361,72 @@ async function main() {
   }
   log(`\n  ✓ /h1b-employer — 12×RANDOM() + trailing slash + 2×404`);
 
+  log(`\n  === SEO discovery (sitemap index, static + employer XML, browse hub) ===`);
+  const smIndexRes = await fetch(new URL("/sitemap.xml", BASE), {
+    headers: { Accept: "application/xml" },
+  });
+  if (smIndexRes.status !== 200) {
+    throw new Error(`GET /sitemap.xml → HTTP ${smIndexRes.status}`);
+  }
+  const smIndexBody = await smIndexRes.text();
+  const smCt = smIndexRes.headers.get("content-type") || "";
+  if (!smCt.includes("xml")) {
+    throw new Error(`sitemap.xml Content-Type expected xml, got ${smCt}`);
+  }
+  if (!smIndexBody.includes("<sitemapindex")) {
+    throw new Error("sitemap.xml: expected <sitemapindex>");
+  }
+  if (!smIndexBody.includes("sitemap-static.xml")) {
+    throw new Error("sitemap.xml: missing sitemap-static.xml");
+  }
+  if (!smIndexBody.includes("sitemap-employers-1.xml")) {
+    throw new Error("sitemap.xml: missing sitemap-employers-1.xml (need employer_seo rows)");
+  }
+
+  const smStaticRes = await fetch(new URL("/sitemap-static.xml", BASE));
+  if (smStaticRes.status !== 200) {
+    throw new Error(`GET /sitemap-static.xml → HTTP ${smStaticRes.status}`);
+  }
+  const smStaticBody = await smStaticRes.text();
+  if (!smStaticBody.includes("<urlset") || !smStaticBody.includes("/employers/")) {
+    throw new Error("sitemap-static.xml: expected urlset with /employers/");
+  }
+
+  const smEmpRes = await fetch(new URL("/sitemap-employers-1.xml", BASE));
+  if (smEmpRes.status !== 200) {
+    throw new Error(`GET /sitemap-employers-1.xml → HTTP ${smEmpRes.status}`);
+  }
+  const smEmpBody = await smEmpRes.text();
+  if (!smEmpBody.includes("<urlset")) {
+    throw new Error("sitemap-employers-1.xml: expected urlset");
+  }
+  if (seoPairs.length > 0 && !smEmpBody.includes("/h1b-employer/")) {
+    throw new Error("sitemap-employers-1.xml: expected /h1b-employer/ when employer_seo has rows");
+  }
+
+  const hubRes = await fetch(new URL("/employers/", BASE));
+  if (hubRes.status !== 200) {
+    throw new Error(`GET /employers/ → HTTP ${hubRes.status}`);
+  }
+  const hubBody = await hubRes.text();
+  if (!hubBody.includes("Browse employers") || !hubBody.includes('href="/employers/a/"')) {
+    throw new Error("/employers/: expected hub HTML with letter links");
+  }
+
+  const letterRes = await fetch(new URL("/employers/a/", BASE));
+  if (letterRes.status !== 200) {
+    throw new Error(`GET /employers/a/ → HTTP ${letterRes.status}`);
+  }
+  const letterBody = await letterRes.text();
+  if (
+    seoPairs.length > 0 &&
+    !letterBody.includes("/h1b-employer/") &&
+    !letterBody.includes("No employers in this group")
+  ) {
+    throw new Error("/employers/a/: expected employer links or empty-group message");
+  }
+  log(`  ✓ sitemaps + /employers/ + /employers/a/`);
+
   log(`\n  Building suggest pools (parallel employer + job)…`);
   const [employerPool, jobPool] = await Promise.all([
     suggestPool("employer", SUGGEST_SEEDS),
