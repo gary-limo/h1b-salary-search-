@@ -393,7 +393,8 @@ ${pagerHtml}`;
  * @returns {Promise<Response | null>}
  */
 export async function trySeoDiscovery(request, env) {
-  if (request.method !== "GET") return null;
+  // Crawlers (e.g. Google) often send HEAD first; only handling GET made sitemaps 404 on HEAD.
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
   const url = new URL(request.url);
   let path = url.pathname;
   if (path.length > 1 && path.endsWith("/")) {

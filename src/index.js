@@ -585,6 +585,11 @@ export default {
 
     const discoveryRes = await trySeoDiscovery(request, env);
     if (discoveryRes) {
+      if (request.method === "HEAD") {
+        const h = new Headers(discoveryRes.headers);
+        h.delete("content-length");
+        return new Response(null, { status: discoveryRes.status, headers: h });
+      }
       return discoveryRes;
     }
 
