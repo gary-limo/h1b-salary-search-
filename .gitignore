@@ -25,6 +25,7 @@ exports/
 # SQLite DB (regenerate with scripts/create_db.py)
 h1b_wages.db
 h1b_wages_export.sql
+employer_seo_export.sql
 h1b_wages_prod_replace.sql
 
 # Local data / archives (CSV/JSON not tracked; keep for your own runs)

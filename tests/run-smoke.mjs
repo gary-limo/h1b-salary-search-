@@ -8,7 +8,16 @@
  * By default refuses non-localhost BASE_URL (use ALLOW_REMOTE_SMOKE=1 to override).
  */
 
-const BASE = process.env.BASE_URL || "http://127.0.0.1:8787";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const TESTS_DIR = path.dirname(__filename);
+const PROJECT_DIR = path.join(TESTS_DIR, "..");
+
+const BASE = process.env.BASE_URL || "http://127.0.0.1:8788";
 const QUIET = process.env.SMOKE_QUIET === "1";
 const SAMPLE_ROWS = Math.min(15, Math.max(1, Number(process.env.SMOKE_SAMPLE_ROWS) || 3));
 
@@ -35,7 +44,7 @@ function assertLocalBaseUrl() {
   if (!local && process.env.ALLOW_REMOTE_SMOKE !== "1") {
     console.error(
       `Refusing to run smoke tests against non-local host (${hostname}).\n` +
-        `Use BASE_URL=http://127.0.0.1:8787 (or set ALLOW_REMOTE_SMOKE=1 to override).`,
+        `Use BASE_URL=http://127.0.0.1:8788 (or set ALLOW_REMOTE_SMOKE=1 to override).`,
     );
     process.exit(1);
   }
@@ -81,6 +90,105 @@ async function suggestPool(field, seeds) {
 function pickRandomUnique(arr, n) {
   const shuffled = [...arr].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(n, shuffled.length));
+}
+
+/** Match Worker `escapeHtmlAttr` for asserting injected meta. */
+function escapeHtmlAttr(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
+}
+
+function findLocalD1DbPath() {
+  const dir = path.join(
+    PROJECT_DIR,
+    ".wrangler/state/v3/d1/miniflare-D1DatabaseObject",
+  );
+  if (!fs.existsSync(dir)) return null;
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sqlite"));
+  if (files.length === 0) return null;
+  files.sort();
+  if (files.length > 1 && process.env.SMOKE_QUIET !== "1") {
+    console.warn(
+      `  ⚠ Multiple local D1 SQLite files (${files.length}); using ${files[0]} — keep one file if slug tests mismatch dev.`,
+    );
+  }
+  return path.join(dir, files[0]);
+}
+
+const EMPLOYER_SEO_COL_SEP = "\x1f";
+
+/**
+ * @param {string} dbPath
+ * @param {number} limit
+ * @returns {{ slug: string, employer_name: string }[]}
+ */
+function queryEmployerSeoRandomPairs(dbPath, limit) {
+  const n = Math.max(1, Math.min(500, Math.floor(Number(limit)) || 1));
+  const sql = `SELECT slug, employer_name FROM employer_seo ORDER BY RANDOM() LIMIT ${n};`;
+  let raw;
+  try {
+    raw = execFileSync("sqlite3", ["-separator", EMPLOYER_SEO_COL_SEP, dbPath, sql], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (e) {
+    throw new Error(
+      `sqlite3 failed reading employer_seo (install sqlite3 CLI?): ${e && e.message ? e.message : e}`,
+    );
+  }
+  const rows = [];
+  for (const line of raw.split("\n")) {
+    if (!line) continue;
+    const i = line.indexOf(EMPLOYER_SEO_COL_SEP);
+    if (i === -1) continue;
+    rows.push({
+      slug: line.slice(0, i),
+      employer_name: line.slice(i + EMPLOYER_SEO_COL_SEP.length),
+    });
+  }
+  return rows;
+}
+
+async function assertH1bEmployerSeoOk(label, pathnameSuffix, employerName) {
+  const url = new URL(pathnameSuffix, BASE);
+  log(`\n  --- ${label} ---`);
+  log(`    Request: GET ${url.pathname}`);
+  const r = await fetch(url, { headers: { Accept: "text/html" } });
+  log(`    HTTP: ${r.status} (expected 200)`);
+  if (r.status !== 200) {
+    throw new Error(`${label}: HTTP ${r.status} for ${url.pathname}`);
+  }
+  const html = await r.text();
+  const pre = html.match(/<meta\s+name="prefill-employer"\s+content="([^"]*)"/i);
+  if (!pre) {
+    throw new Error(`${label}: missing <meta name="prefill-employer">`);
+  }
+  const expectedAttr = escapeHtmlAttr(employerName);
+  if (pre[1] !== expectedAttr) {
+    throw new Error(
+      `${label}: prefill-employer mismatch — expected ${JSON.stringify(expectedAttr)} got ${JSON.stringify(pre[1])}`,
+    );
+  }
+  const slugSegment = pathnameSuffix.replace(/^\//, "").replace(/\/$/, "");
+  const slugOnly = slugSegment.replace(/^h1b-employer\//, "");
+  if (!html.includes(`/h1b-employer/${slugOnly}`)) {
+    throw new Error(`${label}: HTML missing /h1b-employer/${slugOnly} (canonical)`);
+  }
+  log(`    Check:    ✓ prefill + canonical`);
+}
+
+async function assertH1bEmployerSeo404(label, slug) {
+  const url = new URL(`/h1b-employer/${slug}`, BASE);
+  log(`\n  --- ${label} ---`);
+  log(`    Request: GET ${url.pathname}`);
+  const r = await fetch(url, { headers: { Accept: "*/*" } });
+  log(`    HTTP: ${r.status} (expected 404)`);
+  if (r.status !== 404) {
+    throw new Error(`${label}: expected HTTP 404 for bogus slug, got ${r.status}`);
+  }
+  log(`    Check:    ✓ 404 Not found`);
 }
 
 const SUGGEST_SEEDS = ["a", "e", "i", "o", "s", "m", "t", "p", "r", "c", "d", "g", "h", "n", "l"];
@@ -205,6 +313,53 @@ async function main() {
   await assertAsset("/insights/list-of-h1b-concurrent-employers-2026/", "insights");
   await assertAsset("/reach-out", "reach-out");
   log(`\n  ✓ Assets OK (5 requests above)`);
+
+  log(`\n  === /h1b-employer/:slug (15 cases: random DB slugs + trailing slash + bogus 404s) ===`);
+  const d1Path = findLocalD1DbPath();
+  if (!d1Path) {
+    throw new Error(
+      "No local D1 SQLite under .wrangler/state/... Start dev once, apply migrations/0002_employer_seo.sql, run scripts/build_employer_seo_table.py.",
+    );
+  }
+  let seoPairs;
+  try {
+    seoPairs = queryEmployerSeoRandomPairs(d1Path, 12);
+  } catch (e) {
+    const msg = `${e.stderr ?? ""}${e.message || e}`;
+    if (String(msg).includes("no such table")) {
+      throw new Error(
+        "employer_seo table missing in local D1. Apply migrations/0002_employer_seo.sql then python3 scripts/build_employer_seo_table.py",
+      );
+    }
+    throw e;
+  }
+  if (seoPairs.length < 12) {
+    throw new Error(
+      `employer_seo needs ≥12 rows for slug smoke tests (got ${seoPairs.length}). Run scripts/build_employer_seo_table.py.`,
+    );
+  }
+  for (let i = 0; i < 12; i++) {
+    const { slug, employer_name } = seoPairs[i];
+    await assertH1bEmployerSeoOk(
+      `H1B employer SEO ${i + 1}/15 (ORDER BY RANDOM slug)`,
+      `/h1b-employer/${slug}`,
+      employer_name,
+    );
+  }
+  const first = seoPairs[0];
+  await assertH1bEmployerSeoOk(
+    "H1B employer SEO 13/15 (trailing slash)",
+    `/h1b-employer/${first.slug}/`,
+    first.employer_name,
+  );
+  const bogusSlugs = [
+    "zz-smoke-phantom-slug-deadbeef",
+    "quantum-404-not-in-d1-cafebabe",
+  ];
+  for (let j = 0; j < bogusSlugs.length; j++) {
+    await assertH1bEmployerSeo404(`H1B employer SEO ${14 + j}/15 (bogus slug)`, bogusSlugs[j]);
+  }
+  log(`\n  ✓ /h1b-employer — 12×RANDOM() + trailing slash + 2×404`);
 
   log(`\n  Building suggest pools (parallel employer + job)…`);
   const [employerPool, jobPool] = await Promise.all([

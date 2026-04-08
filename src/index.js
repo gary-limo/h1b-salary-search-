@@ -439,6 +439,106 @@ async function handleContactPost(request, env, cors) {
   return jsonResponse({ ok: true }, 200, cors);
 }
 
+/**
+ * Programmatic SEO: /h1b-employer/<slug> serves index UI with SEO meta + prefill.
+ * Slug and canonical employer_name come from D1 table employer_seo.
+ */
+function displayEmployerName(stored) {
+  const s = String(stored || "").trim();
+  if (!s) return "Employer";
+  return s
+    .split(/\s+/)
+    .map((w) =>
+      w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w
+    )
+    .join(" ");
+}
+
+function h1bEmployerSlugFromPath(pathname) {
+  const p =
+    pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
+  const m = p.match(/^\/h1b-employer\/([a-z0-9-]+)$/);
+  return m ? m[1] : null;
+}
+
+async function serveH1bEmployerPage(request, env, slug) {
+  if (!env.DB || !env.ASSETS) {
+    return new Response("Not available", { status: 503 });
+  }
+  let employerName = null;
+  try {
+    const session = env.DB.withSession();
+    const row = await session
+      .prepare(
+        "SELECT employer_name, filing_count FROM employer_seo WHERE slug = ?"
+      )
+      .bind(slug)
+      .first();
+    const cnt = Number(row?.filing_count ?? 0);
+    if (!row || cnt === 0) {
+      return new Response("Not found", {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    employerName = row.employer_name;
+  } catch (e) {
+    logError(env, "h1b-employer D1 lookup failed", e);
+    return new Response("Server error", { status: 500 });
+  }
+
+  const assetUrl = new URL(request.url);
+  assetUrl.pathname = "/index.html";
+  const assetRes = await env.ASSETS.fetch(
+    new Request(assetUrl.toString(), request)
+  );
+  if (!assetRes.ok) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const fy = String(env.SEO_EMPLOYER_FY || "2026").trim();
+  const display = displayEmployerName(employerName);
+  const title = `${display} H1B LCA filings for year ${fy}`;
+  const desc = `Total list of ${display} H1B LCA filings for year ${fy} with U.S. Department of Labor — job titles, cities, salary, case number.`;
+  const origin = new URL(request.url).origin;
+  const canonical = `${origin}/h1b-employer/${slug}`;
+
+  let html = await assetRes.text();
+  let inject = '<meta charset="UTF-8">';
+  inject += `<meta name="prefill-employer" content="${escapeHtmlAttr(employerName)}">`;
+  const siteKey = (env.TURNSTILE_SITE_KEY || "").trim();
+  if (siteKey && shouldExposeTurnstileWidget(request, env)) {
+    inject += `<meta name="turnstile-site-key" content="${escapeHtmlAttr(siteKey)}">`;
+  }
+  html = html.replace("<meta charset=\"UTF-8\">", inject);
+
+  html = html.replace(
+    /<title>[^<]*<\/title>/i,
+    `<title>${escapeHtmlAttr(title)} | H1B Salary Search</title>`
+  );
+  html = html.replace(
+    /<meta name="description" content="[^"]*"/i,
+    `<meta name="description" content="${escapeHtmlAttr(desc)}"`
+  );
+  html = html.replace(
+    /<link rel="canonical" href="[^"]*"/i,
+    `<link rel="canonical" href="${escapeHtmlAttr(canonical)}"`
+  );
+  html = html.replace(
+    /<meta property="og:title" content="[^"]*"/i,
+    `<meta property="og:title" content="${escapeHtmlAttr(title)}"`
+  );
+  html = html.replace(
+    /<meta property="og:description" content="[^"]*"/i,
+    `<meta property="og:description" content="${escapeHtmlAttr(desc)}"`
+  );
+
+  const headers = new Headers(assetRes.headers);
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.delete("content-length");
+  return new Response(html, { status: 200, headers });
+}
+
 /** Pretty URLs for static insights articles: /insights/ and /insights/<slug>/ → public/insights/.../index.html */
 function insightsHtmlPath(pathname) {
   const p = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
@@ -553,6 +653,11 @@ export default {
       if (insightsRes.ok || insightsRes.status === 304) {
         return insightsRes;
       }
+    }
+
+    const h1bEmpSlug = h1bEmployerSlugFromPath(url.pathname);
+    if (h1bEmpSlug && request.method === "GET" && env.ASSETS) {
+      return serveH1bEmployerPage(request, env, h1bEmpSlug);
     }
 
     if (staticRouteMap[url.pathname]) {

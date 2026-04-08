@@ -783,6 +783,17 @@ acSetup(jobInput, "jobDropdown", "job");
 
 (async function initSuggestions() {
   await ensureApiSuggestReady(true);
+  const prefill = document
+    .querySelector('meta[name="prefill-employer"]')
+    ?.getAttribute("content")
+    ?.trim();
+  if (prefill) {
+    selEmp = prefill;
+    empInput.value = toTitleCase(prefill);
+    updateClearBtn();
+    await waitForTurnstile();
+    await executeSearch();
+  }
 })();
 
 const origClearClick = $("clearBtn").onclick;
