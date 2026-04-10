@@ -29,7 +29,6 @@ WRANGLER_D1_DIR = os.path.join(
 SITEMAP_MAX_URLS = 45000
 STATIC_SITEMAP_PATHS = [
     "/",
-    "/employers/",
     "/insights/",
     "/insights/list-of-h1b-concurrent-employers-2026/",
     "/reach-out",

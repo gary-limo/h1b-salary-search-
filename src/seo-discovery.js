@@ -11,7 +11,6 @@ const HTML_CACHE = "public, max-age=1800";
 
 const STATIC_SITEMAP_PATHS = [
   "/",
-  "/employers/",
   "/insights/",
   "/insights/list-of-h1b-concurrent-employers-2026/",
   "/reach-out",
@@ -410,15 +409,9 @@ export async function trySeoDiscovery(request, env) {
     return serveSitemapEmployersChunk(request, env, parseInt(chunkMatch[1], 10));
   }
 
-  const browse = parseBrowseEmployersPath(path);
-  if (browse) {
-    if (!env.DB) {
-      return new Response("Not available", { status: 503 });
-    }
-    if (browse.type === "hub") {
-      return serveBrowseHub(request, env);
-    }
-    return serveBrowseLetter(request, env, browse.key, url.searchParams);
+  // Browse employers HTML disabled (remove dead handlers below when cleaning up).
+  if (parseBrowseEmployersPath(path)) {
+    return new Response("Not Found", { status: 404 });
   }
 
   return null;

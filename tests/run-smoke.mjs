@@ -361,7 +361,7 @@ async function main() {
   }
   log(`\n  ✓ /h1b-employer — 12×RANDOM() + trailing slash + 2×404`);
 
-  log(`\n  === SEO discovery (sitemap index, static + employer XML, browse hub) ===`);
+  log(`\n  === SEO discovery (sitemap index, static + employer XML) ===`);
   const smIndexRes = await fetch(new URL("/sitemap.xml", BASE), {
     headers: { Accept: "application/xml" },
   });
@@ -388,8 +388,8 @@ async function main() {
     throw new Error(`GET /sitemap-static.xml → HTTP ${smStaticRes.status}`);
   }
   const smStaticBody = await smStaticRes.text();
-  if (!smStaticBody.includes("<urlset") || !smStaticBody.includes("/employers/")) {
-    throw new Error("sitemap-static.xml: expected urlset with /employers/");
+  if (!smStaticBody.includes("<urlset") || !smStaticBody.includes("/insights/")) {
+    throw new Error("sitemap-static.xml: expected urlset with /insights/");
   }
 
   const smEmpRes = await fetch(new URL("/sitemap-employers-1.xml", BASE));
@@ -404,28 +404,11 @@ async function main() {
     throw new Error("sitemap-employers-1.xml: expected /h1b-employer/ when employer_seo has rows");
   }
 
-  const hubRes = await fetch(new URL("/employers/", BASE));
-  if (hubRes.status !== 200) {
-    throw new Error(`GET /employers/ → HTTP ${hubRes.status}`);
+  const browseDisabledRes = await fetch(new URL("/employers/", BASE));
+  if (browseDisabledRes.status !== 404) {
+    throw new Error(`GET /employers/ → expected 404 (browse disabled), got HTTP ${browseDisabledRes.status}`);
   }
-  const hubBody = await hubRes.text();
-  if (!hubBody.includes("Browse employers") || !hubBody.includes('href="/employers/a/"')) {
-    throw new Error("/employers/: expected hub HTML with letter links");
-  }
-
-  const letterRes = await fetch(new URL("/employers/a/", BASE));
-  if (letterRes.status !== 200) {
-    throw new Error(`GET /employers/a/ → HTTP ${letterRes.status}`);
-  }
-  const letterBody = await letterRes.text();
-  if (
-    seoPairs.length > 0 &&
-    !letterBody.includes("/h1b-employer/") &&
-    !letterBody.includes("No employers in this group")
-  ) {
-    throw new Error("/employers/a/: expected employer links or empty-group message");
-  }
-  log(`  ✓ sitemaps + /employers/ + /employers/a/`);
+  log(`  ✓ sitemaps + /employers/ 404 (browse disabled)`);
 
   log(`\n  Building suggest pools (parallel employer + job)…`);
   const [employerPool, jobPool] = await Promise.all([
