@@ -205,8 +205,6 @@ ${bodyHtml}
   <span class="footer-sep">&middot;</span>
   <a href="/employers/">Browse employers</a>
   <span class="footer-sep">&middot;</span>
-  <a href="/sitemap.xml">Sitemap index</a>
-  <span class="footer-sep">&middot;</span>
   <a href="https://github.com/gary-limo/h1b-salary-search-" target="_blank" rel="noopener noreferrer">Open source</a>
 </footer>
 </body>
@@ -259,14 +257,13 @@ async function serveBrowseHub(request, env) {
   const bodyHtml = `
 <nav class="browse-breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a> / <span aria-current="page">Employers</span></nav>
 <h1>Browse employers</h1>
-<p class="lede">Open an employer’s salary page (LCA disclosure data). Use the <a href="/sitemap.xml">XML sitemap index</a> for crawlers listing every employer URL.</p>
-<p class="browse-sitemap-note">Discovery: <a href="/sitemap.xml">Sitemap index</a> includes <strong>${escapeHtml(String(total.toLocaleString()))}</strong> employer URLs in chunked sitemaps plus static site URLs.</p>
+<p class="lede">Open an employer’s salary page (LCA disclosure data).</p>
 <h2 class="browse-count" style="font-size:15px;font-weight:700;margin-bottom:10px">By first letter or digit</h2>
 <div class="browse-letter-grid" role="navigation" aria-label="Employer first letter">${letterLinks}</div>`;
 
   const html = browseShell({
     title: "Browse employers | H1B Salary Search",
-    description: `Browse ${total.toLocaleString()} employers from U.S. DOL H-1B LCA data. Open salary pages by letter or use the sitemap for full coverage.`,
+    description: `Browse ${total.toLocaleString()} employers from U.S. DOL H-1B LCA data. Open salary pages by letter.`,
     canonical,
     jsonLd,
     bodyHtml,

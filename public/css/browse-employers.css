@@ -19,8 +19,6 @@ main.browse-main{max-width:920px;margin:0 auto;padding:28px 24px 48px}
 .browse-breadcrumb span[aria-current="page"]{color:#5A6478}
 .browse-main h1{font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.5px;margin-bottom:10px}
 .browse-main .lede{color:#5A6478;font-size:15px;margin-bottom:24px;max-width:640px}
-.browse-sitemap-note{font-size:13px;color:#5A6478;margin-bottom:20px;padding:12px 14px;background:rgba(27,42,74,.04);border-radius:10px;border:1px solid #E2DDD6}
-.browse-sitemap-note a{color:#1B2A4A;font-weight:600}
 .browse-letter-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:32px}
 .browse-letter-grid a{display:inline-flex;align-items:center;justify-content:center;min-width:40px;padding:8px 12px;border-radius:8px;border:1px solid #E2DDD6;background:#fff;text-decoration:none;font-weight:600;font-size:13px;transition:background .12s,border-color .12s}
 .browse-letter-grid a:hover{background:rgba(184,160,98,.12);border-color:#B8A062}
