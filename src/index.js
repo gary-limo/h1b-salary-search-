@@ -743,6 +743,28 @@ function resolvedJobMatch(params, employerNorm, jobNorm) {
   return "exact";
 }
 
+/**
+ * Returns the 5-digit US ZIP if the input is ZIP-shaped, else null.
+ * Accepts: "12345", "12345-6789", or "123456789". worksite_postal_code is
+ * stored as 5-digit (~99.4% of rows) or ZIP+4 with a space ("12345 6789")
+ * or no separator ("123456789") for the remaining ~0.6%.
+ */
+function zip5FromInput(s) {
+  const m = s.match(/^(\d{5})(?:-?\d{4})?$/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Returns the lexicographic upper bound (exclusive) for a 5-digit ZIP prefix
+ * range scan: i.e. the next ZIP as a zero-padded 5-char string. For 99999 we
+ * return a sentinel that sorts above any 5-digit-prefixed value so the range
+ * scan still catches stored ZIP+4 variants ("99999 1234", "999991234").
+ */
+function zip5UpperBound(zip5) {
+  if (zip5 === "99999") return "99999~"; // '~' (0x7e) sorts above digits/space
+  return String(Number(zip5) + 1).padStart(5, "0");
+}
+
 async function handleSearch(params, db, cors, env, ctx) {
   const employer = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const job = (params.get("job") || "").trim().slice(0, MAX_INPUT_LENGTH);
@@ -827,8 +849,17 @@ async function handleSearch(params, db, cors, env, ctx) {
     }
   }
   if (locationNorm) {
-    where.push("(worksite_city = ? OR worksite_state = ?)");
-    bindings.push(locationNorm, locationNorm);
+    const zip5 = zip5FromInput(locationNorm);
+    if (zip5) {
+      // Range scan uses idx_h1b_worksite_postal_code and also catches stored
+      // ZIP+4 variants ("12345 6789", "123456789") that sort between the 5-digit
+      // ZIP and the next one. SUBSTR() or LIKE would disable the index.
+      where.push("(worksite_postal_code >= ? AND worksite_postal_code < ?)");
+      bindings.push(zip5, zip5UpperBound(zip5));
+    } else {
+      where.push("(worksite_city = ? OR worksite_state = ?)");
+      bindings.push(locationNorm, locationNorm);
+    }
   }
 
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";

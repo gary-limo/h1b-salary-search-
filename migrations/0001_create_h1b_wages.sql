@@ -33,4 +33,5 @@ CREATE INDEX IF NOT EXISTS idx_h1b_job_title ON h1b_wages(job_title);
 CREATE INDEX IF NOT EXISTS idx_h1b_employer ON h1b_wages(employer_name);
 CREATE INDEX IF NOT EXISTS idx_h1b_worksite_state ON h1b_wages(worksite_state);
 CREATE INDEX IF NOT EXISTS idx_h1b_worksite_city ON h1b_wages(worksite_city);
+CREATE INDEX IF NOT EXISTS idx_h1b_worksite_postal_code ON h1b_wages(worksite_postal_code);
 CREATE INDEX IF NOT EXISTS idx_h1b_wage_from ON h1b_wages(wage_rate_of_pay_from);

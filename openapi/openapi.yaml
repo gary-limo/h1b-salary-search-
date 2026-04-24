@@ -37,7 +37,10 @@ paths:
         At least one of `employer`, `job`, or `location` must be non-empty after trim.
         Strings are truncated server-side to **200** characters. Employer/job/location
         matching uses normalized lowercase equality (location matches `worksite_city` or
-        `worksite_state`).         With `job_match=contains` (and non-empty `employer` and `job`),
+        `worksite_state`). If `location` is a US ZIP (`12345`, `12345-6789`, or `123456789`),
+        only the first 5 digits are used and it matches `worksite_postal_code` via an
+        indexed range scan (`>= '12345' AND < '12346'`), which also catches stored ZIP+4
+        variants (`"12345 6789"`, `"123456789"`). With `job_match=contains` (and non-empty `employer` and `job`),
         `job_title` matches with `LIKE '%pattern%'` after lowercasing the query (wildcards in the
         query are escaped). Otherwise `job_title` uses exact normalized equality. Pagination: `page` 1–10000, `pageSize` 1–100 (default 100).
         Unknown `sort` falls back to `wage_rate_of_pay_from`; `dir` is **ASC** or **DESC**

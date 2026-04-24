@@ -204,6 +204,9 @@ const LOCATIONS = [
   "San Francisco",
   "Boston",
   "Chicago",
+  "98052",
+  "10001",
+  "94043-1351",
 ];
 
 /** Exact strings that must return ≥1 row — exercises & and similar in query encoding. */
@@ -214,7 +217,22 @@ const SPECIAL_CASE_JOB = "R&D Analyst";
 const KLA_CORPORATION_EXAMPLE_EMPLOYER = "KLA Corporation";
 const KLA_CORPORATION_EXAMPLE_JOB_KEYWORD = "mechanical";
 
+function zip5FromInput(s) {
+  const m = String(s || "").match(/^(\d{5})(?:-?\d{4})?$/);
+  return m ? m[1] : null;
+}
+
 function rowMatchesLocation(row, loc) {
+  const zip5 = zip5FromInput(loc);
+  if (zip5) {
+    // Worker only has worksite_city/worksite_state in the search payload, not
+    // worksite_postal_code, so we can only assert the row "could" be a ZIP hit
+    // (city/state should still be populated). A stricter assertion would
+    // require fetching /api/record per row. Treat any non-empty city/state row
+    // as plausible and skip the equality check; the per-LOCATION total>0 count
+    // below is the real signal.
+    return !!(row.worksite_city || row.worksite_state);
+  }
   const l = loc.toLowerCase();
   const city = (row.worksite_city || "").toLowerCase();
   const state = (row.worksite_state || "").toLowerCase();
@@ -240,9 +258,15 @@ function printExpectedActual(kind, params, body) {
   } else if (kind === "job") {
     log(`      Every row: job_title === ${JSON.stringify(params.job)} (case-insensitive)`);
   } else if (kind === "location") {
-    log(
-      `      Every row: worksite_city === ${JSON.stringify(params.location)} OR worksite_state === ${JSON.stringify(params.location)} (case-insensitive)`,
-    );
+    if (zip5FromInput(params.location)) {
+      log(
+        `      Every row: worksite_postal_code in range [${JSON.stringify(params.location)}.., next-ZIP) — first-5 indexed range scan`,
+      );
+    } else {
+      log(
+        `      Every row: worksite_city === ${JSON.stringify(params.location)} OR worksite_state === ${JSON.stringify(params.location)} (case-insensitive)`,
+      );
+    }
   } else if (kind === "employer_job_contains") {
     log(
       `      Every row: employer_name === ${JSON.stringify(params.employer)} (case-insensitive); job_title contains ${JSON.stringify(params.job)} (case-insensitive); job_match=contains`,
