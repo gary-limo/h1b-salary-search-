@@ -207,6 +207,11 @@ const LOCATIONS = [
   "98052",
   "10001",
   "94043-1351",
+  "Seattle, WA",
+  "Charlotte, NC",
+  "San Francisco, California",
+  "Boston, MA",
+  "Chicago, Illinois",
 ];
 
 /** Exact strings that must return ≥1 row — exercises & and similar in query encoding. */
@@ -222,20 +227,56 @@ function zip5FromInput(s) {
   return m ? m[1] : null;
 }
 
+const STATE_ABBREVS = {
+  "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar",
+  "california": "ca", "colorado": "co", "connecticut": "ct", "delaware": "de",
+  "florida": "fl", "georgia": "ga", "hawaii": "hi", "idaho": "id",
+  "illinois": "il", "indiana": "in", "iowa": "ia", "kansas": "ks",
+  "kentucky": "ky", "louisiana": "la", "maine": "me", "maryland": "md",
+  "massachusetts": "ma", "michigan": "mi", "minnesota": "mn", "mississippi": "ms",
+  "missouri": "mo", "montana": "mt", "nebraska": "ne", "nevada": "nv",
+  "new hampshire": "nh", "new jersey": "nj", "new mexico": "nm", "new york": "ny",
+  "north carolina": "nc", "north dakota": "nd", "ohio": "oh", "oklahoma": "ok",
+  "oregon": "or", "pennsylvania": "pa", "rhode island": "ri", "south carolina": "sc",
+  "south dakota": "sd", "tennessee": "tn", "texas": "tx", "utah": "ut",
+  "vermont": "vt", "virginia": "va", "washington": "wa", "west virginia": "wv",
+  "wisconsin": "wi", "wyoming": "wy", "district of columbia": "dc",
+  "american samoa": "as", "guam": "gu", "northern mariana islands": "mp",
+  "puerto rico": "pr", "us virgin islands": "vi",
+};
+const VALID_STATES = new Set(Object.values(STATE_ABBREVS));
+
+function splitLocation(loc) {
+  const idx = loc.indexOf(",");
+  if (idx === -1) return null;
+  const rawCity = loc.slice(0, idx).trim();
+  let rawState = loc.slice(idx + 1).trim();
+  if (STATE_ABBREVS[rawState]) rawState = STATE_ABBREVS[rawState];
+  const stateValid = VALID_STATES.has(rawState);
+  const cityPresent = rawCity.length > 0;
+  if (cityPresent && stateValid) return { city: rawCity, state: rawState };
+  if (cityPresent) return { city: rawCity, state: null };
+  if (stateValid) return { city: null, state: rawState };
+  return null;
+}
+
 function rowMatchesLocation(row, loc) {
   const zip5 = zip5FromInput(loc);
   if (zip5) {
-    // Worker only has worksite_city/worksite_state in the search payload, not
-    // worksite_postal_code, so we can only assert the row "could" be a ZIP hit
-    // (city/state should still be populated). A stricter assertion would
-    // require fetching /api/record per row. Treat any non-empty city/state row
-    // as plausible and skip the equality check; the per-LOCATION total>0 count
-    // below is the real signal.
     return !!(row.worksite_city || row.worksite_state);
   }
   const l = loc.toLowerCase();
   const city = (row.worksite_city || "").toLowerCase();
   const state = (row.worksite_state || "").toLowerCase();
+
+  const split = splitLocation(l);
+  if (split) {
+    if (split.city && split.state) {
+      return city === split.city && state === split.state;
+    }
+    if (split.city) return city === split.city || state === split.city;
+    return city === split.state || state === split.state;
+  }
   return city === l || state === l;
 }
 
@@ -263,9 +304,24 @@ function printExpectedActual(kind, params, body) {
         `      Every row: worksite_postal_code in range [${JSON.stringify(params.location)}.., next-ZIP) — first-5 indexed range scan`,
       );
     } else {
-      log(
-        `      Every row: worksite_city === ${JSON.stringify(params.location)} OR worksite_state === ${JSON.stringify(params.location)} (case-insensitive)`,
-      );
+      const split = splitLocation(params.location.toLowerCase());
+      if (split && split.city && split.state) {
+        log(
+          `      Every row: worksite_city === ${JSON.stringify(split.city)} AND worksite_state === ${JSON.stringify(split.state)} (comma-split, case-insensitive)`,
+        );
+      } else if (split && split.city) {
+        log(
+          `      Every row: worksite_city === ${JSON.stringify(split.city)} OR worksite_state === ${JSON.stringify(split.city)} (comma-split, invalid state dropped, case-insensitive)`,
+        );
+      } else if (split && split.state) {
+        log(
+          `      Every row: worksite_city === ${JSON.stringify(split.state)} OR worksite_state === ${JSON.stringify(split.state)} (comma-split, invalid city dropped, case-insensitive)`,
+        );
+      } else {
+        log(
+          `      Every row: worksite_city === ${JSON.stringify(params.location)} OR worksite_state === ${JSON.stringify(params.location)} (case-insensitive)`,
+        );
+      }
     }
   } else if (kind === "employer_job_contains") {
     log(

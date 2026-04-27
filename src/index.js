@@ -743,6 +743,45 @@ function resolvedJobMatch(params, employerNorm, jobNorm) {
   return "exact";
 }
 
+const STATE_ABBREVS = {
+  "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar",
+  "california": "ca", "colorado": "co", "connecticut": "ct", "delaware": "de",
+  "florida": "fl", "georgia": "ga", "hawaii": "hi", "idaho": "id",
+  "illinois": "il", "indiana": "in", "iowa": "ia", "kansas": "ks",
+  "kentucky": "ky", "louisiana": "la", "maine": "me", "maryland": "md",
+  "massachusetts": "ma", "michigan": "mi", "minnesota": "mn", "mississippi": "ms",
+  "missouri": "mo", "montana": "mt", "nebraska": "ne", "nevada": "nv",
+  "new hampshire": "nh", "new jersey": "nj", "new mexico": "nm", "new york": "ny",
+  "north carolina": "nc", "north dakota": "nd", "ohio": "oh", "oklahoma": "ok",
+  "oregon": "or", "pennsylvania": "pa", "rhode island": "ri", "south carolina": "sc",
+  "south dakota": "sd", "tennessee": "tn", "texas": "tx", "utah": "ut",
+  "vermont": "vt", "virginia": "va", "washington": "wa", "west virginia": "wv",
+  "wisconsin": "wi", "wyoming": "wy", "district of columbia": "dc",
+  "american samoa": "as", "guam": "gu", "northern mariana islands": "mp",
+  "puerto rico": "pr", "us virgin islands": "vi",
+};
+const VALID_STATES = new Set(Object.values(STATE_ABBREVS));
+
+/**
+ * If the input contains a comma, splits into city / state parts and validates
+ * the state against known US state abbreviations. Returns { city, state } where
+ * either may be null if that part is empty or (for state) not a recognized
+ * abbreviation. Returns null if there is no comma or both parts are unusable.
+ */
+function splitLocation(loc) {
+  const idx = loc.indexOf(",");
+  if (idx === -1) return null;
+  const rawCity = loc.slice(0, idx).trim();
+  let rawState = loc.slice(idx + 1).trim();
+  if (STATE_ABBREVS[rawState]) rawState = STATE_ABBREVS[rawState];
+  const stateValid = VALID_STATES.has(rawState);
+  const cityPresent = rawCity.length > 0;
+  if (cityPresent && stateValid) return { city: rawCity, state: rawState };
+  if (cityPresent) return { city: rawCity, state: null };
+  if (stateValid) return { city: null, state: rawState };
+  return null;
+}
+
 /**
  * Returns the 5-digit US ZIP if the input is ZIP-shaped, else null.
  * Accepts: "12345", "12345-6789", or "123456789". worksite_postal_code is
@@ -848,32 +887,60 @@ async function handleSearch(params, db, cors, env, ctx) {
       bindings.push(jobNorm);
     }
   }
+  let locSplit = null;
   if (locationNorm) {
     const zip5 = zip5FromInput(locationNorm);
     if (zip5) {
-      // Range scan uses idx_h1b_worksite_postal_code and also catches stored
-      // ZIP+4 variants ("12345 6789", "123456789") that sort between the 5-digit
-      // ZIP and the next one. SUBSTR() or LIKE would disable the index.
       where.push("(worksite_postal_code >= ? AND worksite_postal_code < ?)");
       bindings.push(zip5, zip5UpperBound(zip5));
     } else {
-      where.push("(worksite_city = ? OR worksite_state = ?)");
-      bindings.push(locationNorm, locationNorm);
+      locSplit = splitLocation(locationNorm);
+      if (locSplit) {
+        if (locSplit.city && locSplit.state) {
+          where.push("(worksite_city = ? AND worksite_state = ?)");
+          bindings.push(locSplit.city, locSplit.state);
+        } else if (locSplit.city) {
+          where.push("(worksite_city = ? OR worksite_state = ?)");
+          bindings.push(locSplit.city, locSplit.city);
+        } else {
+          where.push("(worksite_city = ? OR worksite_state = ?)");
+          bindings.push(locSplit.state, locSplit.state);
+        }
+      } else {
+        where.push("(worksite_city = ? OR worksite_state = ?)");
+        bindings.push(locationNorm, locationNorm);
+      }
     }
   }
 
-  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const countSQL = `SELECT COUNT(*) AS cnt FROM h1b_wages ${whereClause}`;
-  const dataSQL = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
+  let whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  let countSQL = `SELECT COUNT(*) AS cnt FROM h1b_wages ${whereClause}`;
+  let dataSQL = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${whereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
 
   try {
     const session = db.withSession();
-    const [countRow, rows] = await Promise.all([
+    let [countRow, rows] = await Promise.all([
       session.prepare(countSQL).bind(...bindings).first(),
       session.prepare(dataSQL).bind(...bindings).all(),
     ]);
+    let total = countRow?.cnt ?? 0;
+
+    if (total === 0 && locSplit && locSplit.city && locSplit.state) {
+      const fbWhere = where.slice(0, -1);
+      const fbBindings = bindings.slice(0, -2);
+      fbWhere.push("(worksite_city = ? OR worksite_state = ?)");
+      fbBindings.push(locSplit.state, locSplit.state);
+      const fbWhereClause = fbWhere.length ? `WHERE ${fbWhere.join(" AND ")}` : "";
+      const fbCountSQL = `SELECT COUNT(*) AS cnt FROM h1b_wages ${fbWhereClause}`;
+      const fbDataSQL = `SELECT id, employer_name, job_title, wage_rate_of_pay_from, worksite_city, worksite_state, begin_date, end_date FROM h1b_wages ${fbWhereClause} ORDER BY ${sort} ${dir} NULLS LAST LIMIT ${pageSize} OFFSET ${offset}`;
+      [countRow, rows] = await Promise.all([
+        session.prepare(fbCountSQL).bind(...fbBindings).first(),
+        session.prepare(fbDataSQL).bind(...fbBindings).all(),
+      ]);
+      total = countRow?.cnt ?? 0;
+    }
+
     const duration = Date.now() - t0;
-    const total = countRow?.cnt ?? 0;
     const payload = { total, page, pageSize, results: rows.results };
     const response = jsonResponse(payload, 200, cors);
 
