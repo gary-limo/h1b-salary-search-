@@ -665,7 +665,7 @@ export default {
       }
 
       if (url.pathname === "/api/search") {
-        return handleSearch(url.searchParams, env.DB, cors, env, ctx);
+        return handleSearch(url.searchParams, env.DB, cors, env, ctx, request);
       }
       if (url.pathname === "/api/record") {
         return handleRecord(url.searchParams, env.DB, cors);
@@ -804,7 +804,7 @@ function zip5UpperBound(zip5) {
   return String(Number(zip5) + 1).padStart(5, "0");
 }
 
-async function handleSearch(params, db, cors, env, ctx) {
+async function handleSearch(params, db, cors, env, ctx, request) {
   const employer = (params.get("employer") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const job = (params.get("job") || "").trim().slice(0, MAX_INPUT_LENGTH);
   const location = (params.get("location") || "").trim().slice(0, MAX_INPUT_LENGTH);
@@ -831,6 +831,8 @@ async function handleSearch(params, db, cors, env, ctx) {
   const cacheVer = searchCacheVersion(env);
   const kvKey = buildSearchCacheKey(cacheVer, employer, job, location, sort, dir, page, pageSize, jobMatch);
   const cacheUrl = new Request(`https://cache.internal/${encodeURIComponent(kvKey)}`);
+  const cf = request?.cf;
+  const visitorCity = sanitizeLabel(cf?.city || cf?.regionCode || cf?.country || "unknown");
   const searchMeta = {
     employer: employer || null,
     job: job || null,
@@ -840,6 +842,9 @@ async function handleSearch(params, db, cors, env, ctx) {
     dir,
     page,
     page_size: pageSize,
+    visitor_city: cf?.city || null,
+    visitor_region: cf?.regionCode || null,
+    visitor_country: cf?.country || null,
   };
 
   const t0 = Date.now();
@@ -847,7 +852,7 @@ async function handleSearch(params, db, cors, env, ctx) {
     const edgeCached = await caches.default.match(cacheUrl);
     if (edgeCached) {
       if (ctx) {
-        ctx.waitUntil(logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "edge", duration_ms: Date.now() - t0 }));
+        ctx.waitUntil(logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "edge", duration_ms: Date.now() - t0 }, visitorCity));
       }
       return edgeCached;
     }
@@ -862,7 +867,7 @@ async function handleSearch(params, db, cors, env, ctx) {
         if (ctx) {
           ctx.waitUntil(Promise.all([
             caches.default.put(cacheUrl, response.clone()),
-            logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "kv", duration_ms: kvDuration }),
+            logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "kv", duration_ms: kvDuration }, visitorCity),
           ]));
         }
         return response;
@@ -963,7 +968,7 @@ async function handleSearch(params, db, cors, env, ctx) {
           duration_ms: duration,
           rows_returned: total,
         }),
-        logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "d1", total_results: total, duration_ms: duration }),
+        logSearch(env, env.SEARCH_LOGS, { ...searchMeta, cache_tier: "d1", total_results: total, duration_ms: duration }, visitorCity),
       ]));
     }
 
@@ -1084,7 +1089,11 @@ function buildCorsHeaders(request) {
   };
 }
 
-function r2Key(prefix) {
+function sanitizeLabel(s) {
+  return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 30) || "unknown";
+}
+
+function r2Key(prefix, label) {
   const now = new Date();
   const yyyy = now.getUTCFullYear();
   const mm   = String(now.getUTCMonth() + 1).padStart(2, "0");
@@ -1093,7 +1102,8 @@ function r2Key(prefix) {
   const min  = String(now.getUTCMinutes()).padStart(2, "0");
   const ss   = String(now.getUTCSeconds()).padStart(2, "0");
   const rand = Math.random().toString(36).slice(2, 8);
-  return `${prefix}/${yyyy}/${mm}/${dd}/${hh}-${min}-${ss}-${rand}.json`;
+  const file = label ? `${label}.${hh}-${min}-${ss}-${rand}.json` : `${hh}-${min}-${ss}-${rand}.json`;
+  return `${prefix}/${yyyy}/${mm}/${dd}/${file}`;
 }
 
 function shouldLogErrors(env) {
@@ -1152,11 +1162,11 @@ async function logSQL(env, bucket, data) {
   }
 }
 
-async function logSearch(env, bucket, data) {
+async function logSearch(env, bucket, data, label) {
   if (!bucket) return;
   try {
     const body = JSON.stringify(sanitizeLogObject({ ts: new Date().toISOString(), ...data }));
-    await bucket.put(r2Key("search"), body, { httpMetadata: { contentType: "application/json" } });
+    await bucket.put(r2Key("search", label), body, { httpMetadata: { contentType: "application/json" } });
   } catch (e) {
     logError(env, "Search log write failed", e);
   }
