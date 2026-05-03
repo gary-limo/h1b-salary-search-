@@ -3,7 +3,7 @@ const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 75];
 
 const POPULAR = [
-  { label: "Google",            employer: "Google LLC",               job: "",                  loc: "" },
+  { label: "Anthropic",         employer: "Anthropic Pbc",            job: "",                  loc: "" },
   { label: "Amazon",            employer: "Amazon com Services LLC",  job: "",                  loc: "" },
   { label: "Microsoft",         employer: "Microsoft Corporation",    job: "",                  loc: "" },
   { label: "Meta Platforms",    employer: "Meta Platforms Inc",       job: "",                  loc: "" },
@@ -12,7 +12,7 @@ const POPULAR = [
   { label: "Data Scientist",    employer: "",                         job: "data scientist",    loc: "" },
   { label: "AI Engineer", employer: "",                         job: "ai engineer", loc: "" },
   { label: "San Francisco",     employer: "",                         job: "",                  loc: "san francisco" },
-  { label: "Seattle",           employer: "",                         job: "",                  loc: "seattle" },
+  { label: "Google",            employer: "Google LLC",               job: "",                  loc: "" },
   { label: "New York",          employer: "",                         job: "",                  loc: "new york" },
 ];
 

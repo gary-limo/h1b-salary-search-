@@ -222,6 +222,9 @@ const SPECIAL_CASE_JOB = "R&D Analyst";
 const KLA_CORPORATION_EXAMPLE_EMPLOYER = "KLA Corporation";
 const KLA_CORPORATION_EXAMPLE_JOB_KEYWORD = "mechanical";
 
+/** Matches `public/js/index.js` POPULAR chip: label "Anthropic", employer param for /api/search. */
+const POPULAR_ANTHROPIC_EMPLOYER = "Anthropic Pbc";
+
 function zip5FromInput(s) {
   const m = String(s || "").match(/^(\d{5})(?:-?\d{4})?$/);
   return m ? m[1] : null;
@@ -612,6 +615,24 @@ async function main() {
   }
 
   log(`\n  ✓ /api/search special cases passed (${SPECIAL_CASE_EMPLOYER}, ${SPECIAL_CASE_JOB})`);
+
+  log(`\n  === /api/search popular underlying employer (Anthropic Pbc) ===`);
+  const anthropicBody = await assertSearch(
+    `Popular chip employer: ${POPULAR_ANTHROPIC_EMPLOYER}`,
+    { employer: POPULAR_ANTHROPIC_EMPLOYER, pageSize: 5 },
+    "employer",
+    (row, p) => {
+      if (row.employer_name.toLowerCase() !== p.employer.toLowerCase()) {
+        throw new Error(`employer mismatch: got ${JSON.stringify(row.employer_name)}`);
+      }
+    },
+  );
+  if (anthropicBody.total === 0) {
+    throw new Error(
+      `Employer ${JSON.stringify(POPULAR_ANTHROPIC_EMPLOYER)} returned no rows — expected ≥1 (must match h1b_wages after ETL lowercasing; align public/js/index.js POPULAR if DOL name differs).`,
+    );
+  }
+  log(`  ✓ Anthropic Pbc employer search (popular chip underlying)`);
 
   log(`\n  === /api/search job_match=contains (KLA + mechanical keyword) ===`);
   const klaMechanicalBody = await assertSearch(
