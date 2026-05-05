@@ -199,6 +199,7 @@ const LOCATIONS = [
   "NY",
   "WA",
   "FL",
+  "Florida",
   "IL",
   "Seattle",
   "San Francisco",
@@ -280,7 +281,9 @@ function rowMatchesLocation(row, loc) {
     if (split.city) return city === split.city || state === split.city;
     return city === split.state || state === split.state;
   }
-  return city === l || state === l;
+  // Keep behavior consistent with server-side normalization.
+  const stateToken = STATE_ABBREVS[l] || l;
+  return city === stateToken || state === stateToken;
 }
 
 async function assertAsset(path, label) {

@@ -825,11 +825,20 @@ async function handleSearch(params, db, cors, env, ctx, request) {
 
   const employerNorm = employer.toLowerCase();
   const jobNorm = job.toLowerCase();
-  const locationNorm = location.toLowerCase();
+  let locationNorm = location.toLowerCase();
+  // User-facing UI accepts free-form state input. If they type a full
+  // state name like "florida" (without a comma), normalize it to the stored
+  // 2-letter abbreviation ("fl") so it matches `worksite_state`.
+  // (When a comma is present, `splitLocation()` already handles this.)
+  let locationKey = location; // keep raw value for cache key unless we normalize
+  if (!locationNorm.includes(",") && STATE_ABBREVS[locationNorm]) {
+    locationNorm = STATE_ABBREVS[locationNorm];
+    locationKey = locationNorm;
+  }
   const jobMatch = resolvedJobMatch(params, employerNorm, jobNorm);
 
   const cacheVer = searchCacheVersion(env);
-  const kvKey = buildSearchCacheKey(cacheVer, employer, job, location, sort, dir, page, pageSize, jobMatch);
+  const kvKey = buildSearchCacheKey(cacheVer, employer, job, locationKey, sort, dir, page, pageSize, jobMatch);
   const cacheUrl = new Request(`https://cache.internal/${encodeURIComponent(kvKey)}`);
   const cf = request?.cf;
   const visitorCity = sanitizeLabel(cf?.city || cf?.regionCode || cf?.country || "unknown");
