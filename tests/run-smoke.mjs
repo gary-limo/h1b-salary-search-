@@ -198,8 +198,11 @@ const LOCATIONS = [
   "TX",
   "NY",
   "WA",
+  // Explicit Florida coverage for state-abbrev, full-state, and city+state-name.
   "FL",
   "Florida",
+  "florida",
+  "Tampa, Florida",
   "IL",
   "Seattle",
   "San Francisco",
@@ -225,6 +228,8 @@ const KLA_CORPORATION_EXAMPLE_JOB_KEYWORD = "mechanical";
 
 /** Matches `public/js/index.js` POPULAR chip: label "Anthropic", employer param for /api/search. */
 const POPULAR_ANTHROPIC_EMPLOYER = "Anthropic Pbc";
+const TEVA_EMPLOYER = "Teva Pharmaceuticals Usa Inc";
+const TEVA_LOCATION_CASES = ["FL", "Florida"];
 
 function zip5FromInput(s) {
   const m = String(s || "").match(/^(\d{5})(?:-?\d{4})?$/);
@@ -581,6 +586,35 @@ async function main() {
     if (body.total > 0) locNonZero++;
   }
   log(`\n  ✓ /api/search location — ${LOCATIONS.length} queries passed (${locNonZero} with total > 0)`);
+
+  log(`\n  === /api/search employer + location (Teva FL/Florida) ===`);
+  let tevaIdx = 0;
+  for (const location of TEVA_LOCATION_CASES) {
+    tevaIdx++;
+    const tevaBody = await assertSearch(
+      `Teva employer+location ${tevaIdx}/${TEVA_LOCATION_CASES.length}: ${location}`,
+      { employer: TEVA_EMPLOYER, location, pageSize: 5 },
+      "location",
+      (row, p) => {
+        if ((row.employer_name || "").toLowerCase() !== p.employer.toLowerCase()) {
+          throw new Error(`employer mismatch: got ${JSON.stringify(row.employer_name)}`);
+        }
+        if (!rowMatchesLocation(row, p.location)) {
+          throw new Error(
+            `location mismatch for ${JSON.stringify(p.location)}: row city/state ${JSON.stringify(
+              row.worksite_city,
+            )}/${JSON.stringify(row.worksite_state)}`,
+          );
+        }
+      },
+    );
+    if (tevaBody.total === 0) {
+      throw new Error(
+        `Teva + ${JSON.stringify(location)} returned no rows — expected ≥1 (validate employer spelling and FL records in local DB).`,
+      );
+    }
+  }
+  log(`\n  ✓ /api/search Teva employer+location passed (${TEVA_LOCATION_CASES.join(", ")})`);
 
   log(`\n  === /api/search special cases (& in employer / job title) ===`);
   log(`    (require total > 0 — URLSearchParams encodes & in query values)`);
